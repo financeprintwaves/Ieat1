@@ -1,0 +1,5 @@
+{
+  "name": "iEat POS - Local First",
+  "description": "A local-first Point of Sale simulator demonstrating Master-Slave architecture, offline capabilities, and Gemini AI integration for order insights.",
+  "requestFramePermissions": []
+}
