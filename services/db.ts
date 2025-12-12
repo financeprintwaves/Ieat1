@@ -1,14 +1,7 @@
 
-import { Order, MenuItem, SyncStatus, InventoryLog, Employee, Role, AttendanceRecord, OrderItem, TableConfig, Customer } from '../types';
+import Dexie, { type Table } from 'dexie';
+import { Order, MenuItem, SyncStatus, InventoryLog, Employee, Role, AttendanceRecord, OrderItem, TableConfig, Customer, Branch, AppSettings, LoyaltyReward } from '../types';
 import { INITIAL_INVENTORY, MOCK_TABLES } from '../constants';
-
-const DB_KEY_ORDERS = 'ieat_pos_orders_v2';
-const DB_KEY_PRODUCTS = 'ieat_pos_products_v2';
-const DB_KEY_LOGS = 'ieat_pos_logs_v2';
-const DB_KEY_USERS = 'ieat_pos_users_v2';
-const DB_KEY_ATTENDANCE = 'ieat_pos_attendance_v2';
-const DB_KEY_TABLES = 'ieat_pos_tables_v2';
-const DB_KEY_CUSTOMERS = 'ieat_pos_customers_v1';
 
 // Default Admin for initial login
 const DEFAULT_ADMIN: Employee = {
@@ -17,10 +10,30 @@ const DEFAULT_ADMIN: Employee = {
     pin: '1234',
     role: Role.Admin,
     email: 'admin@ieat.com',
-    isCheckedIn: false
+    isCheckedIn: false,
+    branchId: 'branch-1'
 };
 
-// UUID Polyfill for compatibility
+const DEFAULT_BRANCH: Branch = {
+    id: 'branch-1',
+    name: 'Main Street HQ',
+    address: '123 Main St'
+};
+
+const DEFAULT_SETTINGS: AppSettings = {
+    id: 'global',
+    currencySymbol: '$',
+    currentBranchId: 'branch-1'
+};
+
+const DEFAULT_REWARDS: LoyaltyReward[] = [
+  { id: '5off', name: '5.00 Off', cost: 50, value: 5 },
+  { id: '10off', name: '10.00 Off', cost: 100, value: 10 },
+  { id: '25off', name: '25.00 Off', cost: 200, value: 25 },
+  { id: '50off', name: '50.00 Off', cost: 400, value: 50 },
+];
+
+// UUID Polyfill
 export const generateUUID = (): string => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
         return crypto.randomUUID();
@@ -31,174 +44,261 @@ export const generateUUID = (): string => {
     });
 };
 
-class LocalDB {
-  // Helper to safely parse JSON
-  private safeJSONParse<T>(key: string, fallback: T): T {
-      try {
-          const data = localStorage.getItem(key);
-          return data ? JSON.parse(data) : fallback;
-      } catch (e) {
-          console.error(`Error parsing data for key ${key}, resetting to fallback`, e);
-          return fallback;
+class IEatDatabase extends Dexie {
+  orders!: Table<Order>;
+  products!: Table<MenuItem>;
+  inventoryLogs!: Table<InventoryLog>;
+  employees!: Table<Employee>;
+  attendance!: Table<AttendanceRecord>;
+  diningTables!: Table<TableConfig>;
+  customers!: Table<Customer>;
+  branches!: Table<Branch>;
+  settings!: Table<AppSettings>;
+  rewards!: Table<LoyaltyReward>;
+
+  constructor() {
+    super('IEatPOS_DB_v5'); // Increment version
+    
+    // Define Schema
+    (this as any).version(1).stores({
+      orders: 'uuid, status, syncStatus, createdAt, [paymentMethod+status], customerId, branchId', 
+      products: 'id, category, name',
+      inventoryLogs: 'id, itemId, timestamp, branchId',
+      employees: 'id, pin, branchId',
+      attendance: 'id, employeeId, timestamp, branchId',
+      diningTables: 'id, name',
+      customers: 'id, phone, name',
+      branches: 'id, name',
+      settings: 'id',
+      rewards: 'id'
+    });
+
+    // Populate Initial Data
+    (this as any).on('populate', () => {
+       console.log("Populating initial database...");
+       this.products.bulkAdd(INITIAL_INVENTORY);
+       this.diningTables.bulkAdd(MOCK_TABLES.map(name => ({ id: name, name })));
+       this.employees.add(DEFAULT_ADMIN);
+       this.branches.add(DEFAULT_BRANCH);
+       this.settings.add(DEFAULT_SETTINGS);
+       this.rewards.bulkAdd(DEFAULT_REWARDS);
+    });
+  }
+
+  // --- Settings ---
+  async getSettings(): Promise<AppSettings> {
+      const s = await this.settings.get('global');
+      if (!s) {
+          await this.settings.put(DEFAULT_SETTINGS);
+          return DEFAULT_SETTINGS;
       }
+      return s;
+  }
+
+  async updateSettings(updates: Partial<AppSettings>): Promise<void> {
+      await this.settings.update('global', updates);
+  }
+
+  // --- Rewards ---
+  async getRewards(): Promise<LoyaltyReward[]> {
+      const r = await this.rewards.toArray();
+      if (r.length === 0) {
+          await this.rewards.bulkAdd(DEFAULT_REWARDS);
+          return DEFAULT_REWARDS;
+      }
+      return r;
+  }
+
+  async addReward(reward: LoyaltyReward): Promise<void> {
+      await this.rewards.add(reward);
+  }
+
+  async deleteReward(id: string): Promise<void> {
+      await this.rewards.delete(id);
+  }
+
+  // --- Branches ---
+  async getBranches(): Promise<Branch[]> {
+      const b = await this.branches.toArray();
+      if (b.length === 0) {
+          await this.branches.add(DEFAULT_BRANCH);
+          return [DEFAULT_BRANCH];
+      }
+      return b;
+  }
+
+  async addBranch(branch: Branch): Promise<void> {
+      await this.branches.add(branch);
+  }
+
+  async deleteBranch(id: string): Promise<void> {
+      await this.branches.delete(id);
   }
 
   // --- Orders ---
-  private getOrderStore(): Order[] {
-    return this.safeJSONParse<Order[]>(DB_KEY_ORDERS, []);
-  }
 
-  private saveOrderStore(orders: Order[]) {
-    localStorage.setItem(DB_KEY_ORDERS, JSON.stringify(orders));
-  }
-
-  getOrders(): Order[] {
-    const orders = this.getOrderStore();
-    // Migration: Ensure tableIds exists for legacy orders
-    return orders.map(o => ({
-        ...o,
-        tableIds: o.tableIds || (o.tableNo ? [o.tableNo] : [])
-    })).sort((a, b) => b.createdAt - a.createdAt);
+  async getOrders(): Promise<Order[]> {
+    return await this.orders.orderBy('createdAt').reverse().toArray();
   }
 
   async createOrder(order: Order): Promise<void> {
-    const orders = this.getOrderStore();
-    
-    // Ensure items have completed: false by default
+    const settings = await this.getSettings();
     const sanitizedOrder = {
         ...order,
+        branchId: order.branchId || settings.currentBranchId,
         items: order.items.map(item => ({ ...item, completed: false }))
     };
 
-    orders.push(sanitizedOrder);
-    this.saveOrderStore(orders);
-    
-    // If points were redeemed, deduct them immediately from customer
-    if (order.customerId && order.pointsRedeemed && order.pointsRedeemed > 0) {
-        await this.adjustCustomerPoints(order.customerId, -order.pointsRedeemed);
-    }
+    await (this as any).transaction('rw', this.orders, this.products, this.inventoryLogs, this.customers, async () => {
+        await this.orders.add(sanitizedOrder);
 
-    // Decrease Inventory
-    await this.processOrderInventory(sanitizedOrder.items, order.serverName);
+        // Deduct Inventory
+        for (const item of sanitizedOrder.items) {
+            const product = await this.products.get(item.id);
+            if (product) {
+                const newStock = product.stock - item.qty;
+                await this.products.update(item.id, { stock: newStock });
+                
+                await this.inventoryLogs.add({
+                    id: generateUUID(),
+                    itemId: item.id,
+                    itemName: item.name,
+                    change: -item.qty,
+                    reason: 'sale',
+                    timestamp: Date.now(),
+                    reportedBy: order.serverName || 'System',
+                    verified: true,
+                    branchId: sanitizedOrder.branchId
+                });
+            }
+        }
+
+        // Deduct Points if Redeemed
+        if (order.customerId && order.pointsRedeemed && order.pointsRedeemed > 0) {
+            const customer = await this.customers.get(order.customerId);
+            if (customer) {
+                await this.customers.update(order.customerId, { 
+                    points: Math.max(0, customer.points - order.pointsRedeemed) 
+                });
+            }
+        }
+    });
   }
 
-  // New Method: Append items to an existing open order (Multi-round ordering)
   async addItemsToOrder(orderUuid: string, newItems: OrderItem[], addedSubtotal: number, addedTax: number, addedTotal: number, updatedTableIds?: string[], serverName?: string): Promise<void> {
-      const orders = this.getOrderStore();
-      const index = orders.findIndex(o => o.uuid === orderUuid);
-      
-      if (index !== -1) {
-          const order = orders[index];
-          
-          // Sanitize new items
-          const sanitizedItems = newItems.map(item => ({ ...item, completed: false }));
+      await (this as any).transaction('rw', this.orders, this.products, this.inventoryLogs, async () => {
+          const order = await this.orders.get(orderUuid);
+          if (order) {
+              const sanitizedItems = newItems.map(item => ({ ...item, completed: false }));
+              
+              await this.orders.update(orderUuid, {
+                  items: [...order.items, ...sanitizedItems],
+                  subtotal: order.subtotal + addedSubtotal,
+                  tax: order.tax + addedTax,
+                  totalAmount: order.totalAmount + addedTotal,
+                  updatedAt: Date.now(),
+                  syncStatus: SyncStatus.Unsynced,
+                  status: order.status === 'ready' ? 'cooking' : order.status,
+                  tableIds: updatedTableIds || order.tableIds,
+                  tableNo: updatedTableIds ? updatedTableIds.join(', ') : order.tableNo
+              });
 
-          // Update Order
-          orders[index] = {
-              ...order,
-              items: [...order.items, ...sanitizedItems],
-              subtotal: order.subtotal + addedSubtotal,
-              tax: order.tax + addedTax,
-              totalAmount: order.totalAmount + addedTotal, // Assuming discount logic handled at UI or ignored for append
-              updatedAt: Date.now(),
-              syncStatus: SyncStatus.Unsynced, // Needs resync
-              status: order.status === 'ready' ? 'cooking' : order.status, // Reset to cooking if it was ready
-              tableIds: updatedTableIds || order.tableIds,
-              tableNo: updatedTableIds ? updatedTableIds.join(', ') : order.tableNo
-          };
-
-          this.saveOrderStore(orders);
-          
-          // Decrease Inventory for new items only
-          await this.processOrderInventory(sanitizedItems, serverName);
-      }
+              // Inventory deduction for new items
+              for (const item of sanitizedItems) {
+                  const product = await this.products.get(item.id);
+                  if (product) {
+                      await this.products.update(item.id, { stock: product.stock - item.qty });
+                      await this.inventoryLogs.add({
+                          id: generateUUID(),
+                          itemId: item.id,
+                          itemName: item.name,
+                          change: -item.qty,
+                          reason: 'sale',
+                          timestamp: Date.now(),
+                          reportedBy: serverName || 'System',
+                          verified: true,
+                          branchId: order.branchId
+                      });
+                  }
+              }
+          }
+      });
   }
 
   async updateOrder(uuid: string, updates: Partial<Order>): Promise<void> {
-    const orders = this.getOrderStore();
-    const index = orders.findIndex(o => o.uuid === uuid);
-    if (index !== -1) {
-      orders[index] = { ...orders[index], ...updates, updatedAt: Date.now() };
-      this.saveOrderStore(orders);
-    }
+    await this.orders.update(uuid, { ...updates, updatedAt: Date.now() });
   }
 
   async markOrderAsPaid(uuid: string, paymentMethod: 'card' | 'cash', paidAt: number): Promise<void> {
-    const orders = this.getOrderStore();
-    const index = orders.findIndex(o => o.uuid === uuid);
-    if (index !== -1) {
-      const order = orders[index];
-      
-      // Calculate points earned (1 point per $1 spent, floor value)
-      const pointsEarned = Math.floor(order.totalAmount);
+    await (this as any).transaction('rw', this.orders, this.customers, async () => {
+        const order = await this.orders.get(uuid);
+        if (order) {
+            const pointsEarned = Math.floor(order.totalAmount);
+            
+            await this.orders.update(uuid, {
+                status: 'paid',
+                paymentMethod,
+                paidAt,
+                syncStatus: SyncStatus.Unsynced,
+                updatedAt: Date.now(),
+                pointsEarned
+            });
 
-      orders[index] = { 
-        ...order, 
-        status: 'paid', 
-        paymentMethod, 
-        paidAt, 
-        syncStatus: SyncStatus.Unsynced,
-        updatedAt: Date.now(),
-        pointsEarned
-      };
-      this.saveOrderStore(orders);
-
-      // Add points to customer
-      if (order.customerId) {
-          await this.updateCustomerStats(order.customerId, order.totalAmount, pointsEarned);
-      }
-    }
+            if (order.customerId) {
+                const customer = await this.customers.get(order.customerId);
+                if (customer) {
+                    await this.customers.update(order.customerId, {
+                        points: customer.points + pointsEarned,
+                        totalSpent: customer.totalSpent + order.totalAmount,
+                        visits: customer.visits + 1
+                    });
+                }
+            }
+        }
+    });
   }
 
   async toggleOrderItemStatus(orderId: string, itemIndex: number): Promise<void> {
-      const orders = this.getOrderStore();
-      const orderIdx = orders.findIndex(o => o.uuid === orderId);
-      
-      if (orderIdx !== -1) {
-          const order = orders[orderIdx];
-          if (order.items[itemIndex]) {
-              // Toggle boolean
-              order.items[itemIndex].completed = !order.items[itemIndex].completed;
-              
-              // Auto-update order status if all items are done
-              const allDone = order.items.every(i => i.completed);
-              if (allDone && order.status !== 'ready') {
-                  order.status = 'ready';
-              } else if (!allDone && order.status === 'ready') {
-                  order.status = 'cooking';
-              }
-              
-              order.updatedAt = Date.now();
-              this.saveOrderStore(orders);
+      const order = await this.orders.get(orderId);
+      if (order && order.items[itemIndex]) {
+          const newItems = [...order.items];
+          newItems[itemIndex].completed = !newItems[itemIndex].completed;
+          
+          let newStatus = order.status;
+          const allDone = newItems.every(i => i.completed);
+          if (allDone && order.status !== 'ready') {
+              newStatus = 'ready';
+          } else if (!allDone && order.status === 'ready') {
+              newStatus = 'cooking';
           }
+
+          await this.orders.update(orderId, {
+              items: newItems,
+              status: newStatus,
+              updatedAt: Date.now()
+          });
       }
   }
 
   async getUnsyncedOrders(): Promise<Order[]> {
-    return this.getOrderStore().filter(o => o.syncStatus === SyncStatus.Unsynced || o.syncStatus === SyncStatus.Failed);
+    return await this.orders.where('syncStatus').equals(SyncStatus.Unsynced).or('syncStatus').equals(SyncStatus.Failed).toArray();
   }
 
   // --- Customers ---
-  
-  private getCustomerStore(): Customer[] {
-      return this.safeJSONParse<Customer[]>(DB_KEY_CUSTOMERS, []);
+
+  async getCustomers(): Promise<Customer[]> {
+      return await this.customers.toArray();
   }
 
-  private saveCustomerStore(customers: Customer[]) {
-      localStorage.setItem(DB_KEY_CUSTOMERS, JSON.stringify(customers));
-  }
-
-  getCustomers(): Customer[] {
-      return this.getCustomerStore();
+  async getCustomerById(id: string): Promise<Customer | undefined> {
+      return await this.customers.get(id);
   }
 
   async findCustomerByPhone(phone: string): Promise<Customer | undefined> {
-      const customers = this.getCustomerStore();
-      return customers.find(c => c.phone === phone);
+      return await this.customers.where('phone').equals(phone).first();
   }
 
   async createCustomer(name: string, phone: string): Promise<Customer> {
-      const customers = this.getCustomerStore();
       const newCustomer: Customer = {
           id: generateUUID(),
           name,
@@ -208,251 +308,140 @@ class LocalDB {
           visits: 0,
           joinedAt: Date.now()
       };
-      customers.push(newCustomer);
-      this.saveCustomerStore(customers);
+      await this.customers.add(newCustomer);
       return newCustomer;
   }
 
-  async adjustCustomerPoints(customerId: string, delta: number): Promise<void> {
-      const customers = this.getCustomerStore();
-      const index = customers.findIndex(c => c.id === customerId);
-      if (index !== -1) {
-          customers[index].points = Math.max(0, customers[index].points + delta);
-          this.saveCustomerStore(customers);
+  // --- Products / Inventory ---
+
+  async getProducts(): Promise<MenuItem[]> {
+      const count = await this.products.count();
+      if (count === 0) {
+          // If empty (e.g. wiped), re-seed might be needed or return empty
+          return [];
       }
-  }
-
-  async updateCustomerStats(customerId: string, amountSpent: number, pointsEarned: number): Promise<void> {
-      const customers = this.getCustomerStore();
-      const index = customers.findIndex(c => c.id === customerId);
-      if (index !== -1) {
-          customers[index].points += pointsEarned;
-          customers[index].totalSpent += amountSpent;
-          customers[index].visits += 1;
-          this.saveCustomerStore(customers);
-      }
-  }
-
-  // --- Inventory (Products) ---
-  
-  getProducts(): MenuItem[] {
-    // We pass INITIAL_INVENTORY as the fallback, but if the key exists but is empty/corrupt, we want to re-init
-    let products = this.safeJSONParse<MenuItem[] | null>(DB_KEY_PRODUCTS, null);
-    if (!products || products.length === 0) {
-        this.saveProductStore(INITIAL_INVENTORY);
-        return INITIAL_INVENTORY;
-    }
-    return products;
-  }
-
-  private saveProductStore(products: MenuItem[]) {
-    localStorage.setItem(DB_KEY_PRODUCTS, JSON.stringify(products));
+      return await this.products.toArray();
   }
 
   async addProduct(product: MenuItem): Promise<void> {
-      const products = this.getProducts();
-      products.push(product);
-      this.saveProductStore(products);
+      await this.products.add(product);
   }
 
   async updateProduct(id: string, updates: Partial<MenuItem>): Promise<void> {
-      const products = this.getProducts();
-      const index = products.findIndex(p => p.id === id);
-      if (index !== -1) {
-          products[index] = { ...products[index], ...updates };
-          this.saveProductStore(products);
-      }
+      await this.products.update(id, updates);
   }
 
-  // Handle inventory reduction when order is placed
-  private async processOrderInventory(items: OrderItem[], serverName: string = 'System') {
-    const products = this.getProducts();
-    const logs = this.getInventoryLogs();
-
-    items.forEach(item => {
-        const productIndex = products.findIndex(p => p.id === item.id);
-        if (productIndex !== -1) {
-            products[productIndex].stock -= item.qty;
-            
-            // Log the sale
-            logs.push({
-                id: generateUUID(),
-                itemId: item.id,
-                itemName: item.name,
-                change: -item.qty,
-                reason: 'sale',
-                timestamp: Date.now(),
-                reportedBy: serverName,
-                verified: true // Sales are auto-verified
-            });
-        }
-    });
-
-    this.saveProductStore(products);
-    this.saveLogStore(logs);
-  }
-
-  // Inventory Adjustment (Backoffice or Waiter Waste Report)
   async adjustStock(itemId: string, newStock: number, reason: 'restock' | 'waste' | 'adjustment', reportedBy: string = 'Admin', verified: boolean = true): Promise<void> {
-    const products = this.getProducts();
-    const index = products.findIndex(p => p.id === itemId);
-    
-    if (index !== -1) {
-        const oldStock = products[index].stock;
-        const diff = newStock - oldStock;
-        products[index].stock = newStock;
-        
-        this.saveProductStore(products);
-
-        // Log
-        const logs = this.getInventoryLogs();
-        logs.push({
-            id: generateUUID(),
-            itemId: products[index].id,
-            itemName: products[index].name,
-            change: diff,
-            reason: reason,
-            timestamp: Date.now(),
-            reportedBy: reportedBy,
-            verified: verified
-        });
-        this.saveLogStore(logs);
-    }
-  }
-
-  async verifyInventoryLog(logId: string): Promise<void> {
-    const logs = this.getInventoryLogs();
-    const index = logs.findIndex(l => l.id === logId);
-    if (index !== -1) {
-        logs[index].verified = true;
-        this.saveLogStore(logs);
-    }
+      const settings = await this.getSettings();
+      await (this as any).transaction('rw', this.products, this.inventoryLogs, async () => {
+          const product = await this.products.get(itemId);
+          if (product) {
+              const diff = newStock - product.stock;
+              await this.products.update(itemId, { stock: newStock });
+              
+              await this.inventoryLogs.add({
+                  id: generateUUID(),
+                  itemId: product.id,
+                  itemName: product.name,
+                  change: diff,
+                  reason,
+                  timestamp: Date.now(),
+                  reportedBy,
+                  verified,
+                  branchId: settings.currentBranchId
+              });
+          }
+      });
   }
 
   // --- Logs ---
-  getInventoryLogs(): InventoryLog[] {
-    return this.safeJSONParse<InventoryLog[]>(DB_KEY_LOGS, []);
+  async getInventoryLogs(): Promise<InventoryLog[]> {
+      return await this.inventoryLogs.orderBy('timestamp').reverse().toArray();
   }
 
-  private saveLogStore(logs: InventoryLog[]) {
-    localStorage.setItem(DB_KEY_LOGS, JSON.stringify(logs));
-  }
-
-  // --- Users / Employees ---
-  getEmployees(): Employee[] {
-      let users = this.safeJSONParse<Employee[] | null>(DB_KEY_USERS, null);
-      if (!users || users.length === 0) {
-          this.saveUserStore([DEFAULT_ADMIN]);
+  // --- Employees ---
+  async getEmployees(): Promise<Employee[]> {
+      const employees = await this.employees.toArray();
+      if (employees.length === 0) {
+          await this.employees.add(DEFAULT_ADMIN);
           return [DEFAULT_ADMIN];
       }
-      return users;
-  }
-
-  private saveUserStore(users: Employee[]) {
-      localStorage.setItem(DB_KEY_USERS, JSON.stringify(users));
+      return employees;
   }
 
   async addEmployee(employee: Employee): Promise<void> {
-      const users = this.getEmployees();
-      users.push(employee);
-      this.saveUserStore(users);
+      await this.employees.add(employee);
   }
 
-  async deleteEmployee(id: string): Promise<void> {
-      let users = this.getEmployees();
-      users = users.filter(u => u.id !== id);
-      // Ensure at least one admin exists, else restore default
-      if (users.length === 0) {
-          users = [DEFAULT_ADMIN];
-      }
-      this.saveUserStore(users);
-  }
-
-  async authenticate(pin: string): Promise<Employee | null> {
-      const users = this.getEmployees();
-      const user = users.find(u => u.pin === pin);
-      return user || null;
-  }
-
-  // --- Attendance ---
-  getAttendanceLogs(): AttendanceRecord[] {
-      return this.safeJSONParse<AttendanceRecord[]>(DB_KEY_ATTENDANCE, []);
-  }
-
-  private saveAttendanceLogs(logs: AttendanceRecord[]) {
-      localStorage.setItem(DB_KEY_ATTENDANCE, JSON.stringify(logs));
+  async authenticate(pin: string): Promise<Employee | undefined> {
+      return await this.employees.where('pin').equals(pin).first();
   }
 
   async logAttendance(employeeId: string, type: 'check-in' | 'check-out'): Promise<void> {
-      const users = this.getEmployees();
-      const userIndex = users.findIndex(u => u.id === employeeId);
-      
-      if (userIndex !== -1) {
-          // Update User Status
-          users[userIndex] = {
-              ...users[userIndex],
-              isCheckedIn: (type === 'check-in')
-          };
-          this.saveUserStore(users);
+      const settings = await this.getSettings();
+      await (this as any).transaction('rw', this.employees, this.attendance, async () => {
+          const employee = await this.employees.get(employeeId);
+          if (employee) {
+              await this.employees.update(employeeId, { isCheckedIn: (type === 'check-in') });
+              await this.attendance.add({
+                  id: generateUUID(),
+                  employeeId,
+                  employeeName: employee.name,
+                  type,
+                  timestamp: Date.now(),
+                  branchId: settings.currentBranchId
+              });
+          }
+      });
+  }
 
-          // Add Log
-          const logs = this.getAttendanceLogs();
-          logs.push({
-              id: generateUUID(),
-              employeeId,
-              employeeName: users[userIndex].name,
-              type,
-              timestamp: Date.now()
-          });
-          this.saveAttendanceLogs(logs);
-      }
+  async getLastCheckIn(employeeId: string): Promise<AttendanceRecord | undefined> {
+      return await this.attendance
+          .where('employeeId').equals(employeeId)
+          .filter(r => r.type === 'check-in')
+          .reverse()
+          .first();
+  }
+
+  async getAttendanceLogs(): Promise<AttendanceRecord[]> {
+      return await this.attendance.orderBy('timestamp').reverse().toArray();
   }
 
   // --- Tables ---
-  getTables(): TableConfig[] {
-      let tables = this.safeJSONParse<TableConfig[] | null>(DB_KEY_TABLES, null);
-      if (!tables || tables.length === 0) {
-          const initialTables = MOCK_TABLES.map(name => ({ id: name, name }));
-          this.saveTableStore(initialTables);
-          return initialTables;
+  async getTables(): Promise<TableConfig[]> {
+      const tables = await this.diningTables.toArray();
+      if (tables.length === 0) {
+          const initials = MOCK_TABLES.map(name => ({ id: name, name }));
+          await this.diningTables.bulkAdd(initials);
+          return initials;
       }
       return tables;
   }
 
-  private saveTableStore(tables: TableConfig[]) {
-      localStorage.setItem(DB_KEY_TABLES, JSON.stringify(tables));
-  }
-
   async addTable(table: TableConfig): Promise<void> {
-      const tables = this.getTables();
-      tables.push(table);
-      this.saveTableStore(tables);
+      await this.diningTables.add(table);
   }
 
   async updateTable(id: string, updates: Partial<TableConfig>): Promise<void> {
-      const tables = this.getTables();
-      const index = tables.findIndex(t => t.id === id);
-      if (index !== -1) {
-          tables[index] = { ...tables[index], ...updates };
-          this.saveTableStore(tables);
-      }
+      await this.diningTables.update(id, updates);
   }
 
   async deleteTable(id: string): Promise<void> {
-      let tables = this.getTables();
-      tables = tables.filter(t => t.id !== id);
-      this.saveTableStore(tables);
+      await this.diningTables.delete(id);
   }
 
-  clear(): void {
-    localStorage.removeItem(DB_KEY_ORDERS);
-    localStorage.removeItem(DB_KEY_PRODUCTS);
-    localStorage.removeItem(DB_KEY_LOGS);
-    localStorage.removeItem(DB_KEY_USERS);
-    localStorage.removeItem(DB_KEY_ATTENDANCE);
-    localStorage.removeItem(DB_KEY_TABLES);
-    localStorage.removeItem(DB_KEY_CUSTOMERS);
+  // Utility
+  async clear(): Promise<void> {
+      await this.orders.clear();
+      await this.products.clear();
+      await this.inventoryLogs.clear();
+      await this.employees.clear();
+      await this.attendance.clear();
+      await this.diningTables.clear();
+      await this.customers.clear();
+      await this.rewards.clear();
+      // Keep branches and settings to avoid lock out
   }
 }
 
-export const db = new LocalDB();
+export const db = new IEatDatabase();

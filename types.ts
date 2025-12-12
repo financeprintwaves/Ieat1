@@ -15,6 +15,25 @@ export enum Role {
 export type Category = 'food' | 'drink' | 'dessert';
 export type DiningOption = 'dine-in' | 'take-out' | 'delivery';
 
+export interface Branch {
+  id: string;
+  name: string;
+  address?: string;
+}
+
+export interface AppSettings {
+  id: string; // usually 'global'
+  currencySymbol: string;
+  currentBranchId: string;
+}
+
+export interface LoyaltyReward {
+  id: string;
+  name: string;
+  cost: number;  // Points required
+  value: number; // Discount amount
+}
+
 export interface Employee {
   id: string;
   name: string;
@@ -23,6 +42,7 @@ export interface Employee {
   email?: string;
   phone?: string;
   isCheckedIn?: boolean; // New: Track attendance status
+  branchId?: string;     // New: Associate employee with a branch
 }
 
 export interface AttendanceRecord {
@@ -31,6 +51,7 @@ export interface AttendanceRecord {
   employeeName: string;
   type: 'check-in' | 'check-out';
   timestamp: number;
+  branchId?: string; // New: Track which branch
 }
 
 export interface Customer {
@@ -99,6 +120,7 @@ export interface Order {
   customerId?: string; // New: Linked customer
   pointsEarned?: number; // New: Points gained from this order
   pointsRedeemed?: number; // New: Points used on this order
+  branchId?: string; // New: Which branch owns this order
 }
 
 export interface InventoryLog {
@@ -110,6 +132,7 @@ export interface InventoryLog {
   timestamp: number;
   reportedBy?: string; // New: Who made the change
   verified?: boolean;  // New: Has admin approved/seen this?
+  branchId?: string;
 }
 
 export interface DatabaseSchema {
@@ -120,4 +143,7 @@ export interface DatabaseSchema {
   attendance: AttendanceRecord[];
   tables: TableConfig[];
   customers: Customer[];
+  branches: Branch[];
+  settings: AppSettings[];
+  rewards: LoyaltyReward[];
 }
