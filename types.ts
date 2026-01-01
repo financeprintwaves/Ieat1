@@ -25,6 +25,7 @@ export interface AppSettings {
   id: string; // usually 'global'
   currencySymbol: string;
   currentBranchId: string;
+  taxRate: number;
 }
 
 export interface LoyaltyReward {
@@ -41,8 +42,8 @@ export interface Employee {
   role: Role;
   email?: string;
   phone?: string;
-  isCheckedIn?: boolean; // New: Track attendance status
-  branchId?: string;     // New: Associate employee with a branch
+  isCheckedIn?: boolean;
+  branchId?: string;
 }
 
 export interface AttendanceRecord {
@@ -51,7 +52,7 @@ export interface AttendanceRecord {
   employeeName: string;
   type: 'check-in' | 'check-out';
   timestamp: number;
-  branchId?: string; // New: Track which branch
+  branchId?: string;
 }
 
 export interface Customer {
@@ -67,6 +68,7 @@ export interface Customer {
 export interface TableConfig {
   id: string;
   name: string;
+  capacity?: number;
 }
 
 export interface Modifier {
@@ -79,13 +81,13 @@ export interface MenuItem {
   id: string;
   name: string;
   price: number;
-  cost: number;        // For profit reporting
+  cost: number;
   category: Category;
   image?: string;
-  stock: number;       // Inventory tracking
+  stock: number;
   lowStockThreshold: number;
   barcode?: string;
-  modifiers?: Modifier[]; // Available modifiers
+  modifiers?: Modifier[];
   description?: string;
 }
 
@@ -93,13 +95,13 @@ export interface OrderItem extends MenuItem {
   qty: number;
   selectedModifiers: Modifier[];
   notes?: string;
-  completed?: boolean; // New: For KDS item-level tracking
+  completed?: boolean;
 }
 
 export interface Order {
   uuid: string;
-  tableNo?: string;     // Display string (e.g. "1, 2")
-  tableIds: string[];   // Array of table IDs for logic
+  tableNo?: string;
+  tableIds: string[];
   items: OrderItem[];
   subtotal: number;
   tax: number;
@@ -115,12 +117,12 @@ export interface Order {
   paymentMethod?: 'card' | 'cash';
   paidAt?: number;
   customerNotes?: string;
-  serverId?: string;   // New: Track who placed the order
-  serverName?: string; // New: Track who placed the order
-  customerId?: string; // New: Linked customer
-  pointsEarned?: number; // New: Points gained from this order
-  pointsRedeemed?: number; // New: Points used on this order
-  branchId?: string; // New: Which branch owns this order
+  serverId?: string;
+  serverName?: string;
+  customerId?: string;
+  pointsEarned?: number;
+  pointsRedeemed?: number;
+  branchId?: string;
 }
 
 export interface InventoryLog {
@@ -130,20 +132,7 @@ export interface InventoryLog {
   change: number;
   reason: 'sale' | 'restock' | 'waste' | 'adjustment';
   timestamp: number;
-  reportedBy?: string; // New: Who made the change
-  verified?: boolean;  // New: Has admin approved/seen this?
+  reportedBy?: string;
+  verified?: boolean;
   branchId?: string;
-}
-
-export interface DatabaseSchema {
-  orders: Order[];
-  products: MenuItem[];
-  inventoryLogs: InventoryLog[];
-  employees: Employee[];
-  attendance: AttendanceRecord[];
-  tables: TableConfig[];
-  customers: Customer[];
-  branches: Branch[];
-  settings: AppSettings[];
-  rewards: LoyaltyReward[];
 }
