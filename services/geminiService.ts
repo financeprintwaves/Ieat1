@@ -1,4 +1,3 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Order } from '../types';
 
@@ -23,8 +22,9 @@ export const analyzeOrderWithGemini = async (order: Order): Promise<string> => {
   const itemsList = order.items.map(i => `${i.qty}x ${i.name}`).join(', ');
   
   try {
+    // Task Type: Basic Text Task (Proofreading/Commentary). Using recommended model gemini-3-flash-preview.
     const response = await genAI.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3-flash-preview",
       contents: `
         You are a Michelin-star head chef analyzing an incoming POS order.
         The order contains: ${itemsList}.
@@ -54,6 +54,7 @@ export const generateDailyInsight = async (orders: Order[]): Promise<string> => 
     }));
 
     try {
+        // Task Type: Complex Text Task (Pattern analysis/Reasoning). Using recommended model gemini-3-pro-preview.
         const response = await genAI.models.generateContent({
             model: "gemini-3-pro-preview",
             contents: `

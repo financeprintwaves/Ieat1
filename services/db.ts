@@ -1,4 +1,3 @@
-
 import { Order, MenuItem, SyncStatus, InventoryLog, Employee, Role, AttendanceRecord, OrderItem, TableConfig, Customer, Branch, AppSettings, LoyaltyReward } from '../types';
 import { INITIAL_INVENTORY, MOCK_TABLES } from '../constants';
 
@@ -25,8 +24,9 @@ const DEFAULT_ADMIN: Employee = {
 };
 
 const DEFAULT_REWARDS: LoyaltyReward[] = [
-  { id: 'reward-5', name: '$5.00 Discount', cost: 50, value: 5 },
-  { id: 'reward-10', name: '$10.00 Discount', cost: 100, value: 10 },
+  { id: 'reward-5', name: '$5.00 Off', cost: 50, value: 5 },
+  { id: 'reward-10', name: '$10.00 Off', cost: 100, value: 10 },
+  { id: 'reward-25', name: '$25.00 Off', cost: 200, value: 25 },
 ];
 
 export const generateUUID = (): string => {
@@ -217,8 +217,16 @@ class LocalDB {
   getProducts(): MenuItem[] {
     let products = this.safeJSONParse<MenuItem[] | null>(DB_KEY_PRODUCTS, null);
     if (!products || products.length === 0) {
-        this.saveProductStore(INITIAL_INVENTORY);
-        return INITIAL_INVENTORY;
+        // Initialize default products with default branch config
+        const defaults = INITIAL_INVENTORY.map(p => ({
+            ...p,
+            branchConfig: [
+                { branchId: 'branch-1', isVisible: true, price: p.price },
+                { branchId: 'branch-2', isVisible: true, price: p.price }
+            ]
+        }));
+        this.saveProductStore(defaults);
+        return defaults;
     }
     return products;
   }
@@ -422,10 +430,29 @@ class LocalDB {
       return rewards;
   }
   
+  private saveRewards(rewards: LoyaltyReward[]): void {
+      localStorage.setItem(DB_KEY_REWARDS, JSON.stringify(rewards));
+  }
+
+  async addLoyaltyReward(reward: LoyaltyReward): Promise<void> {
+      const rewards = await this.getRewards();
+      rewards.push(reward);
+      this.saveRewards(rewards);
+  }
+
+  async deleteLoyaltyReward(id: string): Promise<void> {
+      let rewards = await this.getRewards();
+      rewards = rewards.filter(r => r.id !== id);
+      this.saveRewards(rewards);
+  }
+  
   async getBranches(): Promise<Branch[]> {
       let branches = this.safeJSONParse<Branch[] | null>(DB_KEY_BRANCHES, null);
       if (!branches || branches.length === 0) {
-          branches = [{ id: 'branch-1', name: 'Main Branch', address: '123 Main St' }];
+          branches = [
+              { id: 'branch-1', name: 'Main Branch', address: '123 Main St' },
+              { id: 'branch-2', name: 'Arabic Bar', address: '456 Downtown' }
+          ];
           this.saveBranches(branches);
       }
       return branches;
@@ -445,6 +472,15 @@ class LocalDB {
       let branches = await this.getBranches();
       branches = branches.filter(b => b.id !== id);
       this.saveBranches(branches);
+  }
+
+  async updateBranch(id: string, updates: Partial<Branch>): Promise<void> {
+      let branches = await this.getBranches();
+      const index = branches.findIndex(b => b.id === id);
+      if (index !== -1) {
+          branches[index] = { ...branches[index], ...updates };
+          this.saveBranches(branches);
+      }
   }
 }
 

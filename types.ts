@@ -1,4 +1,3 @@
-
 export enum SyncStatus {
   Unsynced = 'unsynced',
   Syncing = 'syncing',
@@ -77,10 +76,16 @@ export interface Modifier {
   price: number;
 }
 
+export interface BranchConfig {
+  branchId: string;
+  isVisible: boolean;
+  price: number; // Override price for this branch
+}
+
 export interface MenuItem {
   id: string;
   name: string;
-  price: number;
+  price: number; // Default price
   cost: number;
   category: Category;
   image?: string;
@@ -89,6 +94,8 @@ export interface MenuItem {
   barcode?: string;
   modifiers?: Modifier[];
   description?: string;
+  branchConfig?: BranchConfig[];
+  isTrending?: boolean; // New property
 }
 
 export interface OrderItem extends MenuItem {
