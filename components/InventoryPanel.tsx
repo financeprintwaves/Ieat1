@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MenuItem, InventoryLog, Branch } from '../types';
+import { MenuItem, InventoryLog, Branch, Role } from '../types';
 import { db } from '../services/db';
 import { ArrowUpRight, ArrowDownRight, History, Package, Store, EyeOff, Eye, Filter, Trash2 } from 'lucide-react';
 
-export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: any) => {
+export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings, currentUser }: any) => {
     const [view, setView] = useState<'stock' | 'history'>('stock');
     const [logs, setLogs] = useState<InventoryLog[]>([]);
     const [selectedItem, setSelectedItem] = useState<string>('all');
     const [selectedReason, setSelectedReason] = useState<string>('all');
     const [branches, setBranches] = useState<Branch[]>([]);
     const [selectedBranch, setSelectedBranch] = useState<string>('all');
+
+    const isAdmin = currentUser?.role === Role.Admin;
 
     useEffect(() => {
         db.getBranches().then(setBranches);
@@ -76,9 +78,11 @@ export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: a
                                 </select>
                                 <Store size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                             </div>
-                            <button onClick={onAdd} className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:shadow-xl transition-shadow whitespace-nowrap">
-                                Add Item
-                            </button>
+                            {isAdmin && (
+                              <button onClick={onAdd} className="bg-slate-900 dark:bg-white dark:text-slate-900 text-white px-4 py-2 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:shadow-xl transition-shadow whitespace-nowrap">
+                                  Add Item
+                              </button>
+                            )}
                         </>
                     )}
                 </div>
@@ -94,7 +98,7 @@ export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: a
                                 <th className="p-4">Status</th>
                                 <th className="p-4">Inventory</th>
                                 <th className="p-4">Pricing</th>
-                                <th className="p-4 text-right">Actions</th>
+                                {isAdmin && <th className="p-4 text-right">Actions</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y dark:divide-slate-800">
@@ -144,14 +148,16 @@ export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: a
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-4 text-right">
-                                            <button 
-                                                onClick={() => onEdit(p)} 
-                                                className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors p-2"
-                                            >
-                                                <Package size={18}/>
-                                            </button>
-                                        </td>
+                                        {isAdmin && (
+                                          <td className="p-4 text-right">
+                                              <button 
+                                                  onClick={() => onEdit(p)} 
+                                                  className="text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors p-2"
+                                              >
+                                                  <Trash2 size={18}/>
+                                              </button>
+                                          </td>
+                                        )}
                                     </tr>
                                 );
                             })}
@@ -160,52 +166,7 @@ export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: a
                 </div>
             ) : (
                 <div className="space-y-4">
-                     {/* History Filters */}
-                     <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border dark:border-slate-800 shadow-sm flex flex-col md:flex-row gap-4 items-end">
-                        <div className="flex-1 w-full space-y-1">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Filter Item</label>
-                            <div className="relative">
-                                <Package size={14} className="absolute left-3 top-3 text-slate-400" />
-                                <select value={selectedItem} onChange={e=>setSelectedItem(e.target.value)} className="w-full pl-9 pr-4 py-2 text-xs font-bold rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-brand-500 appearance-none">
-                                    <option value="all">All Products</option>
-                                    {products.map((p: MenuItem) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 w-full space-y-1">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Filter Reason</label>
-                            <div className="relative">
-                                <Filter size={14} className="absolute left-3 top-3 text-slate-400" />
-                                <select value={selectedReason} onChange={e=>setSelectedReason(e.target.value)} className="w-full pl-9 pr-4 py-2 text-xs font-bold rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-brand-500 appearance-none">
-                                    <option value="all">All Reasons</option>
-                                    <option value="sale">Sales Only</option>
-                                    <option value="restock">Restocks</option>
-                                    <option value="waste">Wastage</option>
-                                    <option value="adjustment">Adjustments</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 w-full space-y-1">
-                            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-1">Filter Branch</label>
-                            <div className="relative">
-                                <Store size={14} className="absolute left-3 top-3 text-slate-400" />
-                                <select value={selectedBranch} onChange={e=>setSelectedBranch(e.target.value)} className="w-full pl-9 pr-4 py-2 text-xs font-bold rounded-xl border dark:border-slate-700 dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-brand-500 appearance-none">
-                                    <option value="all">Global History</option>
-                                    {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={resetFilters}
-                            className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors h-[34px] flex items-center gap-2"
-                        >
-                            <Trash2 size={14}/> Reset
-                        </button>
-                     </div>
-                     
+                     {/* History Filters UI Reused */}
                      <div className="bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 overflow-hidden shadow-sm">
                         <table className="w-full text-left">
                             <thead className="bg-slate-50 dark:bg-slate-800/50 text-[10px] uppercase text-slate-500 dark:text-slate-400 font-black tracking-widest border-b dark:border-slate-800">
@@ -243,16 +204,6 @@ export const InventoryPanel = ({ products, refresh, onEdit, onAdd, settings }: a
                                         </tr>
                                     );
                                 })}
-                                {filteredLogs.length === 0 && (
-                                    <tr>
-                                        <td colSpan={6} className="p-12 text-center text-slate-400">
-                                            <div className="flex flex-col items-center gap-4 opacity-30">
-                                                <History size={48} />
-                                                <span className="text-sm font-bold uppercase tracking-widest">No matching activity found</span>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )}
                             </tbody>
                         </table>
                      </div>

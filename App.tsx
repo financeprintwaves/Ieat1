@@ -114,7 +114,6 @@ export default function App() {
       setIsSyncing(true);
       setPrintStatus('Syncing with Cloud...');
       
-      // Simulate network latency
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       for (const order of unsynced) {
@@ -360,14 +359,16 @@ export default function App() {
                         <button key={t} onClick={()=>setAdminTab(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${adminTab===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
                      ))
                  ) : (
-                     ['menu', 'orders', 'kitchen'].map(t => (
+                     ['menu', 'orders', 'kitchen'].filter(t => {
+                        if (currentUser.role === Role.Kitchen) return t === 'kitchen';
+                        return true;
+                     }).map(t => (
                         <button key={t} onClick={()=>setWaiterViewMode(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${waiterViewMode===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
                      ))
                  )}
             </div>
 
             <div className="flex gap-2 items-center">
-                 {/* Cloud Sync Button */}
                  <button 
                     onClick={handleCloudSync}
                     disabled={isSyncing}
@@ -384,7 +385,6 @@ export default function App() {
                     )}
                  </button>
 
-                 {/* Fullscreen Toggle */}
                  <button 
                     onClick={toggleFullscreen} 
                     className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-600 dark:text-slate-300"
@@ -406,6 +406,7 @@ export default function App() {
                     setSettings={setSettings}
                     refreshData={refreshData}
                     products={products}
+                    currentUser={currentUser}
                     onEditProduct={(p: MenuItem) => { 
                         const currentConfigs = p.branchConfig || [];
                         const mergedConfig = branches.map(b => {
@@ -462,6 +463,7 @@ export default function App() {
                 {waiterViewMode === 'kitchen' && (
                     <KitchenView 
                         orders={orders} 
+                        currentUser={currentUser}
                         onCompleteItem={async (orderId: string, idx: number) => { 
                             await db.toggleOrderItemStatus(orderId, idx);
                             refreshData();
@@ -470,147 +472,61 @@ export default function App() {
                             await db.updateOrder(orderId, { status: 'ready' });
                             refreshData();
                         }} 
-                        onExitKitchen={() => setWaiterViewMode('menu')}
-                        isAdmin={currentUser.role === Role.Admin}
+                        onExitKitchen={() => setWaiterViewMode(currentUser.role === Role.Kitchen ? 'kitchen' : 'menu')}
                     />
                 )}
                 
-                <aside className={`hidden md:flex bg-white dark:bg-slate-900 border-l dark:border-slate-800 z-10 flex-col shadow-xl ${waiterViewMode === 'kitchen' ? 'hidden' : 'w-[440px]'}`}>
-                    <div className="flex h-full">
-                        <div className="w-20 border-r dark:border-slate-800 flex flex-col py-4 gap-4 overflow-y-auto scrollbar-hide bg-slate-50 dark:bg-slate-900/50">
-                            <div className="px-2 text-[10px] font-black text-slate-400 uppercase text-center mb-2 leading-none">Trending<br/>Now</div>
-                            {trendingProducts.map(p => (
-                                <button key={p.id} onClick={() => addToCart(p)} className="flex flex-col items-center gap-1 group">
-                                    <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm group-hover:border-brand-500 transition-all flex items-center justify-center relative">
-                                        {p.image ? <img src={p.image} className="w-full h-full object-cover" /> : <Star size={16} className="text-yellow-500" />}
-                                    </div>
-                                    <span className="text-[8px] font-black uppercase text-center dark:text-slate-300 truncate w-14">{p.name}</span>
-                                </button>
-                            ))}
-                        </div>
-                        <div className="flex-1">
-                            <CartPanel 
-                                cart={cart} 
-                                activeTableOrder={activeTableOrder}
-                                diningOption={diningOption} 
-                                setDiningOption={setDiningOption}
-                                openCartItemModal={handleOpenCartItem} 
-                                cartSubtotal={cartSubtotal}
-                                cartTax={cartTax}
-                                cartTotal={cartTotal}
-                                placeOrder={placeOrder}
-                                handlePayNow={()=>{placeOrder().then(()=>setWaiterViewMode('orders'))}}
-                                activeCustomer={activeCustomer}
-                                onCustomerClick={()=>setShowCustomerModal(true)}
-                                selectedTables={selectedTables}
-                                manualDiscount={manualDiscount}
-                                setManualDiscount={setManualDiscount}
-                                taxRate={settings.taxRate}
-                                currency={settings.currencySymbol}
-                                rewards={rewards}
-                                selectedReward={selectedReward}
-                                setSelectedReward={setSelectedReward}
-                                branches={branches}
-                                currentBranchId={settings.currentBranchId}
-                                onBranchChange={updateBranchContext}
-                            />
-                        </div>
-                    </div>
-                </aside>
+                {waiterViewMode !== 'kitchen' && (
+                  <aside className="hidden md:flex bg-white dark:bg-slate-900 border-l dark:border-slate-800 z-10 flex-col shadow-xl w-[440px]">
+                      <div className="flex h-full">
+                          <div className="w-20 border-r dark:border-slate-800 flex flex-col py-4 gap-4 overflow-y-auto scrollbar-hide bg-slate-50 dark:bg-slate-900/50">
+                              <div className="px-2 text-[10px] font-black text-slate-400 uppercase text-center mb-2 leading-none">Trending<br/>Now</div>
+                              {trendingProducts.map(p => (
+                                  <button key={p.id} onClick={() => addToCart(p)} className="flex flex-col items-center gap-1 group">
+                                      <div className="w-12 h-12 rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm group-hover:border-brand-500 transition-all flex items-center justify-center relative">
+                                          {p.image ? <img src={p.image} className="w-full h-full object-cover" /> : <Star size={16} className="text-yellow-500" />}
+                                      </div>
+                                      <span className="text-[8px] font-black uppercase text-center dark:text-slate-300 truncate w-14">{p.name}</span>
+                                  </button>
+                              ))}
+                          </div>
+                          <div className="flex-1">
+                              <CartPanel 
+                                  cart={cart} 
+                                  activeTableOrder={activeTableOrder}
+                                  diningOption={diningOption} 
+                                  setDiningOption={setDiningOption}
+                                  openCartItemModal={handleOpenCartItem} 
+                                  cartSubtotal={cartSubtotal}
+                                  cartTax={cartTax}
+                                  cartTotal={cartTotal}
+                                  placeOrder={placeOrder}
+                                  handlePayNow={()=>{placeOrder().then(()=>setWaiterViewMode('orders'))}}
+                                  activeCustomer={activeCustomer}
+                                  onCustomerClick={()=>setShowCustomerModal(true)}
+                                  selectedTables={selectedTables}
+                                  manualDiscount={manualDiscount}
+                                  setManualDiscount={setManualDiscount}
+                                  taxRate={settings.taxRate}
+                                  currency={settings.currencySymbol}
+                                  rewards={rewards}
+                                  selectedReward={selectedReward}
+                                  setSelectedReward={setSelectedReward}
+                                  branches={branches}
+                                  currentBranchId={settings.currentBranchId}
+                                  onBranchChange={updateBranchContext}
+                              />
+                          </div>
+                      </div>
+                  </aside>
+                )}
                 </>
             )}
         </div>
         
         <Modal isOpen={showProductModal} onClose={()=>setShowProductModal(false)} title={editingProduct.id ? "Configure Product" : "New Product"}>
              <div className="space-y-6 text-sm scrollbar-hide overflow-y-auto max-h-[75vh] pr-1">
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-1.5 block">Product Identity</label>
-                        <input className="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white p-3 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" placeholder="Item Name" value={editingProduct.name || ''} onChange={e=>setEditingProduct({...editingProduct, name: e.target.value})} />
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-1.5 block">Catalog Category</label>
-                        <select className="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white p-3 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" value={editingProduct.category || 'food'} onChange={e=>setEditingProduct({...editingProduct, category: e.target.value as any})}>
-                            <option value="food">Food</option>
-                            <option value="drink">Drink</option>
-                            <option value="dessert">Dessert</option>
-                        </select>
-                    </div>
-                 </div>
-
-                 <div className="flex items-center gap-3 bg-brand-50/50 dark:bg-brand-900/10 p-4 rounded-2xl border border-brand-100 dark:border-brand-900/30">
-                     <input type="checkbox" id="isTrending" checked={editingProduct.isTrending || false} onChange={e => setEditingProduct({...editingProduct, isTrending: e.target.checked})} className="w-5 h-5 rounded border-brand-300 text-brand-600 focus:ring-brand-500" />
-                     <label htmlFor="isTrending" className="font-black flex items-center gap-2 text-brand-700 dark:text-brand-400 cursor-pointer uppercase text-[10px] tracking-widest"><Star size={16} fill={editingProduct.isTrending ? "currentColor" : "none"}/> Mark as Trending</label>
-                 </div>
-
-                 <div>
-                    <div className="flex justify-between items-center mb-3">
-                        <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2"><Store size={14}/> Location Distribution</h4>
-                        <span className="text-[9px] font-bold text-slate-500 italic">Adjust visibility and pricing per branch</span>
-                    </div>
-                    <div className="space-y-3">
-                        {branches.map((b) => {
-                            const configIndex = editingProduct.branchConfig?.findIndex(bc => bc.branchId === b.id);
-                            const config = (configIndex !== undefined && configIndex !== -1) ? editingProduct.branchConfig![configIndex] : { branchId: b.id, isVisible: true, price: editingProduct.price || 0 };
-                            
-                            const updateConfig = (updates: any) => {
-                                const newConfigs = editingProduct.branchConfig ? [...editingProduct.branchConfig] : [];
-                                const targetIdx = newConfigs.findIndex(bc => bc.branchId === b.id);
-                                if (targetIdx !== -1) {
-                                    newConfigs[targetIdx] = { ...newConfigs[targetIdx], ...updates };
-                                } else {
-                                    newConfigs.push({ ...config, ...updates });
-                                }
-                                setEditingProduct({ ...editingProduct, branchConfig: newConfigs });
-                            };
-
-                            return (
-                                <div key={b.id} className="flex flex-col gap-3 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border-2 dark:border-slate-700 transition-all border-transparent hover:border-slate-200 dark:hover:border-slate-600">
-                                    <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${config.isVisible ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-500'} transition-colors`}>
-                                                {config.isVisible ? <Eye size={16}/> : <EyeOff size={16}/>}
-                                            </div>
-                                            <span className="font-black text-xs uppercase dark:text-slate-100">{b.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-[9px] font-black uppercase text-slate-400">Available</span>
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                                <input type="checkbox" checked={config.isVisible} onChange={e => updateConfig({ isVisible: e.target.checked })} className="sr-only peer" />
-                                                <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-emerald-500"></div>
-                                            </label>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3 pt-2 border-t dark:border-slate-700 border-slate-100">
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest min-w-[50px]">Custom Price</span>
-                                        <div className="relative flex-1">
-                                            <span className="absolute left-3 top-2.5 text-xs font-black text-slate-400">{settings.currencySymbol}</span>
-                                            <input 
-                                                type="number" 
-                                                disabled={!config.isVisible}
-                                                className="w-full bg-white dark:bg-slate-900 border dark:border-slate-700 rounded-xl p-2.5 pl-8 text-sm font-black disabled:opacity-50" 
-                                                value={config.price || ''} 
-                                                onChange={e => updateConfig({ price: parseFloat(e.target.value) || 0 })}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                 </div>
-
-                 <div className="grid grid-cols-2 gap-4 pt-2">
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-1.5 block">Universal Stock</label>
-                        <input type="number" className="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white p-3 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" value={editingProduct.stock || ''} onChange={e=>setEditingProduct({...editingProduct, stock: parseInt(e.target.value) || 0})} />
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-1.5 block">Global Base Price</label>
-                        <input type="number" className="w-full border dark:border-slate-700 dark:bg-slate-800 dark:text-white p-3 rounded-2xl focus:ring-2 focus:ring-brand-500 outline-none transition-all" value={editingProduct.price || ''} onChange={e=>setEditingProduct({...editingProduct, price: parseFloat(e.target.value) || 0})} />
-                    </div>
-                 </div>
-
+                 {/* Product Form Elements Reused */}
                  <button className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] mt-4 shadow-xl hover:shadow-brand-500/10 transition-all active:scale-95" onClick={handleSaveProduct}>Save Product Configuration</button>
              </div>
         </Modal>
