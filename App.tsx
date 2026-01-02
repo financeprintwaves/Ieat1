@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Utensils, Moon, Sun, LogOut, ShoppingBag, Minus, Plus, CheckCircle,
@@ -9,6 +10,7 @@ import {
   DiningOption, Customer, Role, SyncStatus, Modifier, LoyaltyReward, Branch
 } from './types';
 import { db, generateUUID } from './services/db';
+import { ApiService } from './services/api';
 import { analyzeOrderWithGemini } from './services/geminiService';
 
 // Components
@@ -105,25 +107,35 @@ export default function App() {
 
   const handleCloudSync = async () => {
       const unsynced = orders.filter(o => o.syncStatus === SyncStatus.Unsynced);
-      if (unsynced.length === 0) {
-          setPrintStatus('Cloud is already in sync!');
-          setTimeout(() => setPrintStatus(null), 1500);
-          return;
-      }
-
-      setIsSyncing(true);
-      setPrintStatus('Syncing with Cloud...');
       
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      setIsSyncing(true);
+      setPrintStatus('Synchronizing Master DB...');
+      
+      try {
+          // 1. Push orders if any
+          if (unsynced.length > 0) {
+              await ApiService.syncOrders(unsynced);
+              for (const order of unsynced) {
+                  await db.updateOrder(order.uuid, { syncStatus: SyncStatus.Synced });
+              }
+          }
 
-      for (const order of unsynced) {
-          await db.updateOrder(order.uuid, { syncStatus: SyncStatus.Synced });
+          // 2. Pull latest product master data
+          const masterProducts = await ApiService.getMasterProducts();
+          if (masterProducts && masterProducts.length > 0) {
+              // Note: You might want to merge or replace local products based on logic
+              console.log('Master Products Pulled:', masterProducts.length);
+          }
+
+          setPrintStatus('Cloud Sync Successful!');
+      } catch (error) {
+          console.error('Sync failed:', error);
+          setPrintStatus('Sync Failed: Check Connection');
+      } finally {
+          setTimeout(() => setPrintStatus(null), 2000);
+          setIsSyncing(false);
+          await refreshData();
       }
-
-      await refreshData();
-      setIsSyncing(false);
-      setPrintStatus('Sync Complete!');
-      setTimeout(() => setPrintStatus(null), 1500);
   };
 
   const handleLogout = () => setCurrentUser(null);
