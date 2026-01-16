@@ -21,7 +21,33 @@ class SupabaseDB {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []) as Order[];
+
+    return (data || []).map((order: any) => ({
+      uuid: order.id,
+      tableNo: order.table_nos?.join(', '),
+      tableIds: order.table_nos || [],
+      items: order.items || [],
+      subtotal: order.subtotal,
+      tax: order.tax,
+      discount: order.discount || 0,
+      totalAmount: order.total_amount,
+      status: order.status,
+      diningOption: order.dining_option,
+      syncStatus: order.sync_status,
+      createdAt: new Date(order.created_at).getTime(),
+      updatedAt: new Date(order.updated_at).getTime(),
+      opLogId: order.id,
+      aiInsight: order.ai_insight,
+      paymentMethod: order.payment_method,
+      paidAt: order.paid_at ? new Date(order.paid_at).getTime() : undefined,
+      customerNotes: order.customer_notes,
+      serverId: order.server_id,
+      serverName: order.server_name,
+      customerId: order.customer_id,
+      pointsEarned: order.points_earned,
+      pointsRedeemed: order.points_redeemed,
+      branchId: order.branch_id
+    }));
   }
 
   async getFilteredOrders(startDate: number, endDate: number, branchId?: string): Promise<Order[]> {
@@ -40,15 +66,68 @@ class SupabaseDB {
 
     const { data, error } = await query;
     if (error) throw error;
-    return (data || []) as Order[];
+
+    return (data || []).map((order: any) => ({
+      uuid: order.id,
+      tableNo: order.table_nos?.join(', '),
+      tableIds: order.table_nos || [],
+      items: order.items || [],
+      subtotal: order.subtotal,
+      tax: order.tax,
+      discount: order.discount || 0,
+      totalAmount: order.total_amount,
+      status: order.status,
+      diningOption: order.dining_option,
+      syncStatus: order.sync_status,
+      createdAt: new Date(order.created_at).getTime(),
+      updatedAt: new Date(order.updated_at).getTime(),
+      opLogId: order.id,
+      aiInsight: order.ai_insight,
+      paymentMethod: order.payment_method,
+      paidAt: order.paid_at ? new Date(order.paid_at).getTime() : undefined,
+      customerNotes: order.customer_notes,
+      serverId: order.server_id,
+      serverName: order.server_name,
+      customerId: order.customer_id,
+      pointsEarned: order.points_earned,
+      pointsRedeemed: order.points_redeemed,
+      branchId: order.branch_id
+    }));
   }
 
   async createOrder(order: Order): Promise<void> {
+    const dbOrder = {
+      id: order.uuid,
+      customer_id: order.customerId,
+      server_id: order.serverId,
+      branch_id: order.branchId,
+      table_nos: order.tableIds,
+      dining_option: order.diningOption,
+      status: order.status,
+      subtotal: order.subtotal,
+      tax: order.tax,
+      discount: order.discount,
+      total_amount: order.totalAmount,
+      sync_status: order.syncStatus,
+      payment_method: order.paymentMethod,
+      points_earned: order.pointsEarned || 0,
+      points_redeemed: order.pointsRedeemed || 0,
+      ai_insight: order.aiInsight,
+      customer_notes: order.customerNotes,
+      items: order.items,
+      created_at: new Date(order.createdAt).toISOString(),
+      updated_at: new Date(order.updatedAt).toISOString(),
+      paid_at: order.paidAt ? new Date(order.paidAt).toISOString() : null
+    };
+
     const { error } = await supabase
       .from('orders')
-      .insert([order]);
+      .insert([dbOrder]);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
 
     if (order.customerId && order.pointsRedeemed && order.pointsRedeemed > 0) {
       await this.adjustCustomerPoints(order.customerId, -order.pointsRedeemed);
@@ -131,7 +210,33 @@ class SupabaseDB {
       .in('sync_status', ['unsynced', 'failed']);
 
     if (error) throw error;
-    return (data || []) as Order[];
+
+    return (data || []).map((order: any) => ({
+      uuid: order.id,
+      tableNo: order.table_nos?.join(', '),
+      tableIds: order.table_nos || [],
+      items: order.items || [],
+      subtotal: order.subtotal,
+      tax: order.tax,
+      discount: order.discount || 0,
+      totalAmount: order.total_amount,
+      status: order.status,
+      diningOption: order.dining_option,
+      syncStatus: order.sync_status,
+      createdAt: new Date(order.created_at).getTime(),
+      updatedAt: new Date(order.updated_at).getTime(),
+      opLogId: order.id,
+      aiInsight: order.ai_insight,
+      paymentMethod: order.payment_method,
+      paidAt: order.paid_at ? new Date(order.paid_at).getTime() : undefined,
+      customerNotes: order.customer_notes,
+      serverId: order.server_id,
+      serverName: order.server_name,
+      customerId: order.customer_id,
+      pointsEarned: order.points_earned,
+      pointsRedeemed: order.points_redeemed,
+      branchId: order.branch_id
+    }));
   }
 
   async addItemsToOrder(orderUuid: string, newItems: OrderItem[], addedSubtotal: number, addedTax: number, addedTotal: number, updatedTableIds?: string[], serverName?: string): Promise<void> {

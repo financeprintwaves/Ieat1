@@ -333,7 +333,7 @@ export default function App() {
 
           if (lastOrder) {
               try {
-                  const transaction = await PaymentService.processPayment(
+                  await db.createPaymentTransaction(
                       lastOrder.uuid,
                       cashAmount,
                       cardAmount,
@@ -342,17 +342,22 @@ export default function App() {
                       currentUser?.id
                   );
 
-                  await PaymentService.completePayment(transaction.id, cardRef);
-
                   const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
                   await db.markOrderAsPaid(lastOrder.uuid, paymentMethod, Date.now());
 
-                  await offlineStorage.queueSyncOperation('payment', {
-                      orderId: lastOrder.uuid,
-                      transactionId: transaction.id,
+                  await db.updateOrderPaymentStatus(lastOrder.uuid, 'complete', {
                       cashAmount,
                       cardAmount,
                       totalAmount: cartTotal,
+                      cardReference: cardRef
+                  });
+
+                  await offlineStorage.queueSyncOperation('payment', {
+                      orderId: lastOrder.uuid,
+                      cashAmount,
+                      cardAmount,
+                      totalAmount: cartTotal,
+                      cardReference: cardRef,
                       timestamp: Date.now()
                   });
 
