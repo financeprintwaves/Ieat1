@@ -73,7 +73,7 @@ export function PaymentModal({
     }
   };
 
-  const renderAmount = (amount: number) => `${currency} ${amount.toFixed(2)}`;
+  const renderAmount = (amount: number) => `${currency} ${amount.toFixed(3)}`;
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Process Payment">

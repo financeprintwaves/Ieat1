@@ -21,6 +21,7 @@ import { MenuGrid } from './components/MenuGrid';
 import { OrderList } from './components/OrderList';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Modal, PrintingOverlay, ReceiptOverlay } from './components/Shared';
+import { PaymentModal } from './components/PaymentModal';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
@@ -61,6 +62,8 @@ export default function App() {
   const [orderToSettle, setOrderToSettle] = useState<Order | null>(null);
   const [printStatus, setPrintStatus] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const refreshData = async () => {
       setOrders(await db.getOrders());
@@ -298,6 +301,31 @@ export default function App() {
       refreshData();
   };
 
+  const handlePayNow = async () => {
+      if (cart.length === 0) return;
+      setShowPaymentModal(true);
+  };
+
+  const handlePaymentComplete = async (cashAmount: number, cardAmount: number, cardRef?: string) => {
+      setIsProcessingPayment(true);
+      try {
+          await placeOrder();
+          const lastOrder = (await db.getOrders()).sort((a, b) => b.createdAt - a.createdAt)[0];
+          if (lastOrder) {
+              const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
+              await db.markOrderAsPaid(lastOrder.uuid, paymentMethod, Date.now());
+              setReceiptOrder(lastOrder);
+          }
+          setShowPaymentModal(false);
+          refreshData();
+      } catch (error) {
+          console.error('Payment failed:', error);
+          throw error;
+      } finally {
+          setIsProcessingPayment(false);
+      }
+  };
+
   const triggerReprint = (order: Order) => {
       setPrintStatus('Printing Receipt...');
       setTimeout(() => {
@@ -310,6 +338,17 @@ export default function App() {
       if (cart[index]) {
           setTempCartItem(JSON.parse(JSON.stringify(cart[index])));
           setActiveCartItemIndex(index);
+      }
+  };
+
+  const updateCartItemQty = (index: number, delta: number) => {
+      const newCart = [...cart];
+      if (newCart[index]) {
+          newCart[index].qty += delta;
+          if (newCart[index].qty <= 0) {
+              newCart.splice(index, 1);
+          }
+          setCart(newCart);
       }
   };
 
@@ -526,17 +565,17 @@ export default function App() {
                               ))}
                           </div>
                           <div className="flex-1">
-                              <CartPanel 
-                                  cart={cart} 
+                              <CartPanel
+                                  cart={cart}
                                   activeTableOrder={activeTableOrder}
-                                  diningOption={diningOption} 
+                                  diningOption={diningOption}
                                   setDiningOption={setDiningOption}
-                                  openCartItemModal={handleOpenCartItem} 
+                                  openCartItemModal={handleOpenCartItem}
                                   cartSubtotal={cartSubtotal}
                                   cartTax={cartTax}
                                   cartTotal={cartTotal}
                                   placeOrder={placeOrder}
-                                  handlePayNow={()=>{placeOrder().then(()=>setWaiterViewMode('orders'))}}
+                                  handlePayNow={handlePayNow}
                                   activeCustomer={activeCustomer}
                                   onCustomerClick={()=>setShowCustomerModal(true)}
                                   selectedTables={selectedTables}
@@ -550,6 +589,7 @@ export default function App() {
                                   branches={branches}
                                   currentBranchId={settings.currentBranchId}
                                   onBranchChange={updateBranchContext}
+                                  updateCartItemQty={updateCartItemQty}
                               />
                           </div>
                       </div>
@@ -565,6 +605,15 @@ export default function App() {
                  <button className="w-full bg-slate-900 dark:bg-white dark:text-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] mt-4 shadow-xl hover:shadow-brand-500/10 transition-all active:scale-95" onClick={handleSaveProduct}>Save Product Configuration</button>
              </div>
         </Modal>
+
+        <PaymentModal
+            isOpen={showPaymentModal}
+            totalAmount={cartTotal}
+            currency={settings.currencySymbol}
+            onPaymentComplete={handlePaymentComplete}
+            onClose={() => setShowPaymentModal(false)}
+            isProcessing={isProcessingPayment}
+        />
 
         {receiptOrder && <ReceiptOverlay order={receiptOrder} currency={settings.currencySymbol} onClose={() => setReceiptOrder(null)} />}
         <PrintingOverlay status={printStatus} />
