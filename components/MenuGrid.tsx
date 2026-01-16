@@ -26,7 +26,7 @@ export const MenuGrid = ({
     });
 
     return (
-        <main className="flex-1 overflow-y-auto p-4 flex flex-col pb-20 md:pb-4 bg-slate-50 dark:bg-slate-950">
+        <main className="flex-1 overflow-y-auto p-4 flex flex-col pb-20 md:pb-4 bg-slate-50 dark:bg-slate-950 md:pt-4 pt-4 md:mt-0 mt-14">
              {/* Visual Table Floor Plan (Horizontal Scroll) */}
              <div className="mb-6">
                 <div className="flex justify-between items-center mb-3 px-1">

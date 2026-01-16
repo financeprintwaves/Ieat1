@@ -24,6 +24,8 @@ import { OrderList } from './components/OrderList';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Modal, PrintingOverlay, ReceiptOverlay } from './components/Shared';
 import { PaymentModal } from './components/PaymentModal';
+import { MobileTopBar } from './components/MobileTopBar';
+import { CartBottomSheet } from './components/CartBottomSheet';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
@@ -46,8 +48,9 @@ export default function App() {
   const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
   const [mobileCartOpen, setMobileCartOpen] = useState(false);
   const [activeCartItemIndex, setActiveCartItemIndex] = useState<number | null>(null);
-  const [tempCartItem, setTempCartItem] = useState<OrderItem | null>(null); 
+  const [tempCartItem, setTempCartItem] = useState<OrderItem | null>(null);
   const [rewards, setRewards] = useState<LoyaltyReward[]>([]);
+  const [bottomSheetOpen, setBottomSheetOpen] = useState(false);
   
   const [darkMode, setDarkMode] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -444,6 +447,43 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen bg-slate-50 dark:bg-slate-950 flex flex-col overflow-hidden text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
+        <MobileTopBar
+            itemCount={cart.length}
+            totalAmount={cartTotal}
+            currency={settings.currencySymbol}
+            onCartClick={() => setBottomSheetOpen(true)}
+            onPayClick={handlePayNow}
+            isPayDisabled={cart.length === 0}
+        />
+
+        <CartBottomSheet
+            isOpen={bottomSheetOpen}
+            onClose={() => setBottomSheetOpen(false)}
+            cart={cart}
+            diningOption={diningOption}
+            setDiningOption={setDiningOption}
+            openCartItemModal={handleOpenCartItem}
+            cartSubtotal={cartSubtotal}
+            cartTax={cartTax}
+            cartTotal={cartTotal}
+            placeOrder={placeOrder}
+            handlePayNow={handlePayNow}
+            activeCustomer={activeCustomer}
+            onCustomerClick={() => setShowCustomerModal(true)}
+            selectedTables={selectedTables}
+            manualDiscount={manualDiscount}
+            setManualDiscount={setManualDiscount}
+            currency={settings.currencySymbol}
+            rewards={rewards}
+            selectedReward={selectedReward}
+            setSelectedReward={setSelectedReward}
+            branches={branches}
+            currentBranchId={settings.currentBranchId}
+            onBranchChange={updateBranchContext}
+            updateCartItemQty={updateCartItemQty}
+            taxRate={settings.taxRate}
+        />
+
         <nav className="h-16 bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-4 md:px-6 flex items-center justify-between shadow-sm shrink-0 z-40">
             <div className="flex items-center gap-6">
                 <h1 className="font-black text-xl md:text-2xl italic text-brand-600 dark:text-brand-400 flex items-center gap-2"><Utensils className="hidden md:block"/>iEat POS</h1>
@@ -609,7 +649,7 @@ export default function App() {
                     />
                 )}
                 
-                {waiterViewMode !== 'kitchen' && (
+                {waiterViewMode !== 'kitchen' && !bottomSheetOpen && (
                   <aside className="hidden md:flex bg-white dark:bg-slate-900 border-l dark:border-slate-800 z-10 flex-col shadow-xl w-[440px]">
                       <div className="flex h-full">
                           <div className="w-20 border-r dark:border-slate-800 flex flex-col py-4 gap-4 overflow-y-auto scrollbar-hide bg-slate-50 dark:bg-slate-900/50">
