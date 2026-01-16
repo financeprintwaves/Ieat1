@@ -240,13 +240,44 @@ class SupabaseDB {
       .select('*');
 
     if (error) throw error;
-    return (data || []) as MenuItem[];
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      category: item.category,
+      price: item.price,
+      cost: item.cost,
+      stock: item.stock,
+      lowStockThreshold: item.low_stock_threshold,
+      barcode: item.barcode,
+      image: item.image,
+      isTrending: item.is_trending,
+      isKitchenItem: item.is_kitchen_item,
+      menuCategory: item.menu_category
+    }));
   }
 
   async addProduct(product: MenuItem): Promise<void> {
+    const dbProduct = {
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      price: product.price,
+      cost: product.cost,
+      stock: product.stock,
+      low_stock_threshold: product.lowStockThreshold,
+      barcode: product.barcode,
+      image: product.image,
+      is_trending: product.isTrending || false,
+      is_kitchen_item: product.isKitchenItem || false,
+      menu_category: product.menuCategory || 'general'
+    };
+
     const { error } = await supabase
       .from('menu_items')
-      .insert([product]);
+      .insert([dbProduct]);
 
     if (error) throw error;
 
@@ -272,9 +303,23 @@ class SupabaseDB {
 
     if (fetchError) throw fetchError;
 
+    const dbUpdates: any = {};
+    if (updates.name !== undefined) dbUpdates.name = updates.name;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
+    if (updates.category !== undefined) dbUpdates.category = updates.category;
+    if (updates.price !== undefined) dbUpdates.price = updates.price;
+    if (updates.cost !== undefined) dbUpdates.cost = updates.cost;
+    if (updates.stock !== undefined) dbUpdates.stock = updates.stock;
+    if (updates.lowStockThreshold !== undefined) dbUpdates.low_stock_threshold = updates.lowStockThreshold;
+    if (updates.barcode !== undefined) dbUpdates.barcode = updates.barcode;
+    if (updates.image !== undefined) dbUpdates.image = updates.image;
+    if (updates.isTrending !== undefined) dbUpdates.is_trending = updates.isTrending;
+    if (updates.isKitchenItem !== undefined) dbUpdates.is_kitchen_item = updates.isKitchenItem;
+    if (updates.menuCategory !== undefined) dbUpdates.menu_category = updates.menuCategory;
+
     const { error: updateError } = await supabase
       .from('menu_items')
-      .update(updates)
+      .update(dbUpdates)
       .eq('id', id);
 
     if (updateError) throw updateError;
