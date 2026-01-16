@@ -1,6 +1,7 @@
-import React, { useRef } from 'react';
-import { Download, Printer, Copy, X } from 'lucide-react';
+import React, { useRef, useState, useEffect } from 'react';
+import { Download, Printer, Copy, X, Usb, Check, AlertCircle } from 'lucide-react';
 import { Order, AppSettings } from '../types';
+import { printerService } from '../services/printerService';
 
 interface BillPrintingProps {
   order: Order;
@@ -18,6 +19,14 @@ export function BillPrinting({
   variant = 'customer'
 }: BillPrintingProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const [usbPrinterStatus, setUsbPrinterStatus] = useState<{ connected: boolean; printerName: string | null }>({ connected: false, printerName: null });
+  const [isUsbPrinting, setIsUsbPrinting] = useState(false);
+  const [usbPrintError, setUsbPrintError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const status = printerService.getStatus();
+    setUsbPrinterStatus(status);
+  }, []);
 
   const handlePrint = () => {
     if (printRef.current) {
@@ -28,6 +37,49 @@ export function BillPrinting({
         printWindow.print();
         onPrint?.();
       }
+    }
+  };
+
+  const handleConnectUSBPrinter = async () => {
+    try {
+      setUsbPrintError(null);
+      const connected = await printerService.requestPrinter();
+      if (connected) {
+        const status = printerService.getStatus();
+        setUsbPrinterStatus(status);
+      }
+    } catch (error) {
+      console.error('Failed to connect to USB printer:', error);
+      setUsbPrintError('Failed to connect to printer. Make sure your printer is connected via USB.');
+    }
+  };
+
+  const handleUSBPrint = async () => {
+    if (!usbPrinterStatus.connected) {
+      setUsbPrintError('No USB printer connected. Please connect a printer first.');
+      return;
+    }
+
+    setIsUsbPrinting(true);
+    setUsbPrintError(null);
+
+    try {
+      if (variant === 'kitchen') {
+        await printerService.printKitchenOrder(order, 'iEat POS');
+      } else {
+        await printerService.printReceipt(
+          order,
+          'iEat POS',
+          'Restaurant Management System',
+          settings.currencySymbol
+        );
+      }
+      onPrint?.();
+    } catch (error) {
+      console.error('Failed to print via USB:', error);
+      setUsbPrintError('Failed to print. Please check your printer connection.');
+    } finally {
+      setIsUsbPrinting(false);
     }
   };
 
@@ -211,26 +263,65 @@ export function BillPrinting({
           </div>
         </div>
 
-        <div className="p-4 border-t dark:border-slate-800 flex gap-2 bg-slate-50 dark:bg-slate-800">
-          <button
-            onClick={handlePrint}
-            className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
-          >
-            <Printer size={16} />
-            Print
-          </button>
-          <button
-            onClick={handleDownloadPDF}
-            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
-          >
-            <Download size={16} />
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg font-bold text-sm"
-          >
-            Close
-          </button>
+        <div className="p-4 border-t dark:border-slate-800 space-y-3 bg-slate-50 dark:bg-slate-800">
+          {usbPrintError && (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 rounded-lg flex gap-2">
+              <AlertCircle size={16} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700 dark:text-red-300">{usbPrintError}</p>
+            </div>
+          )}
+
+          {usbPrinterStatus.connected && (
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-2 rounded-lg flex items-center gap-2">
+              <Check size={14} className="text-green-600 dark:text-green-400" />
+              <span className="text-xs text-green-700 dark:text-green-300">
+                USB Printer Connected: {usbPrinterStatus.printerName || 'Unknown'}
+              </span>
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={handleUSBPrint}
+              disabled={!usbPrinterStatus.connected || isUsbPrinting}
+              className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 dark:disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              <Usb size={16} />
+              {isUsbPrinting ? 'Printing...' : 'USB Print'}
+            </button>
+
+            {!usbPrinterStatus.connected && (
+              <button
+                onClick={handleConnectUSBPrinter}
+                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+              >
+                <Usb size={16} />
+                Connect Printer
+              </button>
+            )}
+
+            <button
+              onClick={handlePrint}
+              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              <Printer size={16} />
+              Browser Print
+            </button>
+
+            <button
+              onClick={handleDownloadPDF}
+              className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors"
+            >
+              <Download size={16} />
+            </button>
+
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-900 dark:text-white rounded-lg font-bold text-sm"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

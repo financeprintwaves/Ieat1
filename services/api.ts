@@ -41,4 +41,12 @@ export class ApiService {
             body: JSON.stringify({ employeeId, type, branchId }),
         });
     }
+
+    // Sync payment transactions to cloud
+    static async syncPayment(paymentData: any): Promise<{ success: boolean; message: string }> {
+        return this.request('/sync/payment', {
+            method: 'POST',
+            body: JSON.stringify(paymentData),
+        });
+    }
 }

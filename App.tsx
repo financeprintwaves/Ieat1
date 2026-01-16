@@ -12,6 +12,8 @@ import {
 import { db, generateUUID } from './services/db';
 import { ApiService } from './services/api';
 import { analyzeOrderWithGemini } from './services/geminiService';
+import { PaymentService } from './services/paymentService';
+import { offlineStorage } from './services/offlineService';
 
 // Components
 import { LoginScreen } from './components/LoginScreen';
@@ -110,12 +112,11 @@ export default function App() {
 
   const handleCloudSync = async () => {
       const unsynced = orders.filter(o => o.syncStatus === SyncStatus.Unsynced);
-      
+
       setIsSyncing(true);
       setPrintStatus('Synchronizing Master DB...');
-      
+
       try {
-          // 1. Push orders if any
           if (unsynced.length > 0) {
               await ApiService.syncOrders(unsynced);
               for (const order of unsynced) {
@@ -123,10 +124,23 @@ export default function App() {
               }
           }
 
-          // 2. Pull latest product master data
+          const pendingOps = await offlineStorage.getPendingSyncOperations();
+          for (const op of pendingOps) {
+              try {
+                  if (op.type === 'payment') {
+                      await ApiService.syncPayment(op.data);
+                  } else if (op.type === 'create_order') {
+                      await ApiService.syncOrders([op.data]);
+                  }
+                  await offlineStorage.markSyncOperationComplete(op.id);
+              } catch (err) {
+                  console.error(`Failed to sync operation ${op.id}:`, err);
+                  await offlineStorage.markSyncOperationFailed(op.id);
+              }
+          }
+
           const masterProducts = await ApiService.getMasterProducts();
           if (masterProducts && masterProducts.length > 0) {
-              // Note: You might want to merge or replace local products based on logic
               console.log('Master Products Pulled:', masterProducts.length);
           }
 
@@ -308,18 +322,56 @@ export default function App() {
 
   const handlePaymentComplete = async (cashAmount: number, cardAmount: number, cardRef?: string) => {
       setIsProcessingPayment(true);
+      setPrintStatus('Processing Payment...');
+
       try {
           await placeOrder();
+
+          await new Promise(resolve => setTimeout(resolve, 500));
+
           const lastOrder = (await db.getOrders()).sort((a, b) => b.createdAt - a.createdAt)[0];
+
           if (lastOrder) {
-              const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
-              await db.markOrderAsPaid(lastOrder.uuid, paymentMethod, Date.now());
-              setReceiptOrder(lastOrder);
+              try {
+                  const transaction = await PaymentService.processPayment(
+                      lastOrder.uuid,
+                      cashAmount,
+                      cardAmount,
+                      cartTotal,
+                      cardRef,
+                      currentUser?.id
+                  );
+
+                  await PaymentService.completePayment(transaction.id, cardRef);
+
+                  const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
+                  await db.markOrderAsPaid(lastOrder.uuid, paymentMethod, Date.now());
+
+                  await offlineStorage.queueSyncOperation('payment', {
+                      orderId: lastOrder.uuid,
+                      transactionId: transaction.id,
+                      cashAmount,
+                      cardAmount,
+                      totalAmount: cartTotal,
+                      timestamp: Date.now()
+                  });
+
+                  setPrintStatus('Payment Successful!');
+                  setReceiptOrder(lastOrder);
+              } catch (paymentError) {
+                  console.error('Payment processing error:', paymentError);
+                  throw new Error('Payment processing failed. Please try again.');
+              }
+          } else {
+              throw new Error('Order creation failed. Please try again.');
           }
+
           setShowPaymentModal(false);
-          refreshData();
+          setTimeout(() => setPrintStatus(null), 2000);
+          await refreshData();
       } catch (error) {
           console.error('Payment failed:', error);
+          setPrintStatus(null);
           throw error;
       } finally {
           setIsProcessingPayment(false);
