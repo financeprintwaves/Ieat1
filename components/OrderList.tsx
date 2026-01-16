@@ -1,10 +1,14 @@
 import React from 'react';
-import { CreditCard, Printer } from 'lucide-react';
+import { CreditCard, Printer, User } from 'lucide-react';
 import { SyncIndicator, OrderStatusBadge } from './Shared';
 
 export const OrderList = ({ orders, settings, setOrderToSettle, triggerReprint }: any) => {
     return (
         <main className="flex-1 overflow-y-auto p-4 bg-slate-100 dark:bg-slate-950">
+            <div className="mb-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl">
+                <p className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">Multi-Device Order Management</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">View all orders from any device. Select "Settle & Print" to process payment and print invoice from this device.</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{orders.map((o: any) => (
                 <div key={o.uuid} className="bg-white dark:bg-slate-900 p-4 rounded-xl border dark:border-slate-800 shadow-sm flex flex-col h-full">
                     <div className="flex justify-between mb-4">
@@ -14,6 +18,12 @@ export const OrderList = ({ orders, settings, setOrderToSettle, triggerReprint }
                         </div>
                         <OrderStatusBadge status={o.status}/>
                     </div>
+                    {o.serverName && (
+                        <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 mb-2">
+                            <User size={12} />
+                            <span>Server: {o.serverName}</span>
+                        </div>
+                    )}
                     <div className="flex-1 text-sm text-slate-500 dark:text-slate-400 mb-4 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border dark:border-slate-800">
                         <div className="flex justify-between mb-2">
                             <span>Items ({o.items.length})</span>

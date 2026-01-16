@@ -66,6 +66,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [isSettlingExistingOrder, setIsSettlingExistingOrder] = useState(false);
 
   const refreshData = async () => {
       setOrders(await db.getOrders());
@@ -302,21 +303,15 @@ export default function App() {
       refreshData();
   };
   
-  const processPayment = async (method: 'card' | 'cash') => {
-      if (!orderToSettle) return;
-      setPrintStatus('Processing Payment...');
-      await new Promise(r => setTimeout(r, 1000));
-      await db.markOrderAsPaid(orderToSettle.uuid, method, Date.now());
-      setPrintStatus('Printing Receipt...');
-      await new Promise(r => setTimeout(r, 1500));
-      setPrintStatus(null);
-      setReceiptOrder(orderToSettle);
-      setOrderToSettle(null);
-      refreshData();
+  const handleSettleExistingOrder = (order: Order) => {
+      setOrderToSettle(order);
+      setIsSettlingExistingOrder(true);
+      setShowPaymentModal(true);
   };
 
   const handlePayNow = async () => {
       if (cart.length === 0) return;
+      setIsSettlingExistingOrder(false);
       setShowPaymentModal(true);
   };
 
@@ -325,58 +320,63 @@ export default function App() {
       setPrintStatus('Processing Payment...');
 
       try {
-          await placeOrder();
+          let orderToProcess: Order;
 
-          await new Promise(resolve => setTimeout(resolve, 500));
-
-          const lastOrder = (await db.getOrders()).sort((a, b) => b.createdAt - a.createdAt)[0];
-
-          if (lastOrder) {
-              try {
-                  await db.createPaymentTransaction(
-                      lastOrder.uuid,
-                      cashAmount,
-                      cardAmount,
-                      cartTotal,
-                      cardRef,
-                      currentUser?.id
-                  );
-
-                  const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
-                  await db.markOrderAsPaid(lastOrder.uuid, paymentMethod, Date.now());
-
-                  await db.updateOrderPaymentStatus(lastOrder.uuid, 'complete', {
-                      cashAmount,
-                      cardAmount,
-                      totalAmount: cartTotal,
-                      cardReference: cardRef
-                  });
-
-                  await offlineStorage.queueSyncOperation('payment', {
-                      orderId: lastOrder.uuid,
-                      cashAmount,
-                      cardAmount,
-                      totalAmount: cartTotal,
-                      cardReference: cardRef,
-                      timestamp: Date.now()
-                  });
-
-                  setPrintStatus('Payment Successful!');
-                  setReceiptOrder(lastOrder);
-              } catch (paymentError) {
-                  console.error('Payment processing error:', paymentError);
-                  throw new Error('Payment processing failed. Please try again.');
-              }
+          if (isSettlingExistingOrder && orderToSettle) {
+              orderToProcess = orderToSettle;
           } else {
-              throw new Error('Order creation failed. Please try again.');
+              await placeOrder();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              const allOrders = await db.getOrders();
+              const lastOrder = allOrders.sort((a, b) => b.createdAt - a.createdAt)[0];
+
+              if (!lastOrder) {
+                  throw new Error('Order creation failed. Please try again.');
+              }
+              orderToProcess = lastOrder;
           }
 
+          const orderTotal = isSettlingExistingOrder ? orderToProcess.totalAmount : cartTotal;
+
+          await db.createPaymentTransaction(
+              orderToProcess.uuid,
+              cashAmount,
+              cardAmount,
+              orderTotal,
+              cardRef,
+              currentUser?.id
+          );
+
+          const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
+          await db.markOrderAsPaid(orderToProcess.uuid, paymentMethod, Date.now());
+
+          await db.updateOrderPaymentStatus(orderToProcess.uuid, 'complete', {
+              cashAmount,
+              cardAmount,
+              totalAmount: orderTotal,
+              cardReference: cardRef
+          });
+
+          await offlineStorage.queueSyncOperation('payment', {
+              orderId: orderToProcess.uuid,
+              cashAmount,
+              cardAmount,
+              totalAmount: orderTotal,
+              cardReference: cardRef,
+              timestamp: Date.now()
+          });
+
+          setPrintStatus('Payment Successful!');
+          setReceiptOrder(orderToProcess);
           setShowPaymentModal(false);
+          setOrderToSettle(null);
+          setIsSettlingExistingOrder(false);
           setTimeout(() => setPrintStatus(null), 2000);
           await refreshData();
       } catch (error) {
           console.error('Payment failed:', error);
           setPrintStatus(null);
+          setIsProcessingPayment(false);
           throw error;
       } finally {
           setIsProcessingPayment(false);
@@ -481,7 +481,9 @@ export default function App() {
                         <button key={t} onClick={()=>setWaiterViewMode(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${waiterViewMode===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
                      ))
                  ) : currentUser.role === Role.Waiter ? (
-                     <button onClick={()=>setWaiterViewMode('menu')} className="px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap bg-slate-800 dark:bg-slate-700 text-white">POS</button>
+                     ['menu', 'orders'].map(t => (
+                        <button key={t} onClick={()=>setWaiterViewMode(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${waiterViewMode===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
+                     ))
                  ) : null}
 
                  {/* Admin mode toggle - only for admins */}
@@ -584,10 +586,10 @@ export default function App() {
                      />
                 )}
                 {waiterViewMode === 'orders' && (
-                    <OrderList 
+                    <OrderList
                         orders={orders}
                         settings={settings}
-                        setOrderToSettle={setOrderToSettle}
+                        setOrderToSettle={handleSettleExistingOrder}
                         triggerReprint={triggerReprint}
                     />
                 )}
@@ -665,10 +667,14 @@ export default function App() {
 
         <PaymentModal
             isOpen={showPaymentModal}
-            totalAmount={cartTotal}
+            totalAmount={isSettlingExistingOrder && orderToSettle ? orderToSettle.totalAmount : cartTotal}
             currency={settings.currencySymbol}
             onPaymentComplete={handlePaymentComplete}
-            onClose={() => setShowPaymentModal(false)}
+            onClose={() => {
+                setShowPaymentModal(false);
+                setOrderToSettle(null);
+                setIsSettlingExistingOrder(false);
+            }}
             isProcessing={isProcessingPayment}
         />
 
