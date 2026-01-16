@@ -1,23 +1,30 @@
 
-import React from 'react';
-import { Award, MapPin, User, Users, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import React, { useState } from 'react';
+import { Award, MapPin, User, Users, CheckCircle2, AlertCircle, Clock, ChefHat } from 'lucide-react';
 import { MenuItem, TableConfig, Order } from '../types';
 
-export const MenuGrid = ({ 
-    addToCart, 
-    settings, 
-    tables, 
-    selectedTables, 
-    handleTableToggle, 
-    occupiedTables, 
+export const MenuGrid = ({
+    addToCart,
+    settings,
+    tables,
+    selectedTables,
+    handleTableToggle,
+    occupiedTables,
     tableBalances,
-    selectedCategory, 
-    setSelectedCategory, 
-    filteredProducts, 
-    topSellingProductIds, 
+    selectedCategory,
+    setSelectedCategory,
+    filteredProducts,
+    topSellingProductIds,
     getProductPriceForBranch,
-    orders 
+    orders
 }: any) => {
+    const [menuCategory, setMenuCategory] = useState<'all' | 'indian-bar' | 'arabic-bar'>('all');
+
+    const filteredByMenuCategory = filteredProducts.filter((p: MenuItem) => {
+        if (menuCategory === 'all') return true;
+        return p.menuCategory === menuCategory;
+    });
+
     return (
         <main className="flex-1 overflow-y-auto p-4 flex flex-col pb-20 md:pb-4 bg-slate-50 dark:bg-slate-950">
              {/* Visual Table Floor Plan (Horizontal Scroll) */}
@@ -102,6 +109,28 @@ export const MenuGrid = ({
                 </div>
              </div>
              
+             {/* Menu Category Tabs (Indian Bar / Arabic Bar) */}
+             <div className="flex gap-3 mb-4 overflow-x-auto scrollbar-hide">
+                <button
+                    onClick={() => setMenuCategory('all')}
+                    className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${menuCategory === 'all' ? 'bg-brand-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-500 border dark:border-slate-800 hover:border-brand-400'}`}
+                >
+                    All Menu
+                </button>
+                <button
+                    onClick={() => setMenuCategory('indian-bar')}
+                    className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${menuCategory === 'indian-bar' ? 'bg-orange-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-500 border dark:border-slate-800 hover:border-orange-400'}`}
+                >
+                    🇮🇳 Indian Bar
+                </button>
+                <button
+                    onClick={() => setMenuCategory('arabic-bar')}
+                    className={`px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${menuCategory === 'arabic-bar' ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-500 border dark:border-slate-800 hover:border-emerald-400'}`}
+                >
+                    🇦🇪 Arabic Bar
+                </button>
+             </div>
+
              {/* Category Filters */}
              <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide">
                 <button onClick={() => setSelectedCategory('all')} className={`px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${selectedCategory === 'all' ? 'bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-500 border dark:border-slate-800'}`}>All Items</button>
@@ -112,19 +141,25 @@ export const MenuGrid = ({
 
              {/* 4-5 Items Per Row Density Grid */}
              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                 {filteredProducts.map((p: MenuItem) => {
+                 {filteredByMenuCategory.map((p: MenuItem) => {
                      const displayPrice = getProductPriceForBranch(p);
                      return (
-                     <button 
-                        key={p.id} 
-                        onClick={()=>addToCart(p)} 
+                     <button
+                        key={p.id}
+                        onClick={()=>addToCart(p)}
                         className="bg-white dark:bg-slate-900 p-3 rounded-2xl border dark:border-slate-800 text-left hover:shadow-xl hover:-translate-y-1 transition-all group overflow-hidden relative flex flex-col h-full shadow-sm"
                      >
                          {p.image && <img src={p.image} className="absolute inset-0 w-full h-full object-cover opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none"/>}
-                         
+
                          {topSellingProductIds.includes(p.id) && (
                              <div className="absolute top-2 right-2 bg-yellow-400 text-yellow-900 text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-sm z-20 flex items-center gap-0.5">
                                  <Award size={10} /> BEST
+                             </div>
+                         )}
+
+                         {p.isKitchenItem && (
+                             <div className="absolute top-2 left-2 bg-blue-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full shadow-sm z-20 flex items-center gap-0.5">
+                                 <ChefHat size={10} /> KITCHEN
                              </div>
                          )}
 

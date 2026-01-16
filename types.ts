@@ -95,7 +95,9 @@ export interface MenuItem {
   modifiers?: Modifier[];
   description?: string;
   branchConfig?: BranchConfig[];
-  isTrending?: boolean; // New property
+  isTrending?: boolean;
+  isKitchenItem?: boolean;
+  menuCategory?: 'indian-bar' | 'arabic-bar' | 'general';
 }
 
 export interface OrderItem extends MenuItem {

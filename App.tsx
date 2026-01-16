@@ -140,21 +140,20 @@ export default function App() {
 
   const handleLogout = () => setCurrentUser(null);
 
-  const switchRole = (role: Role) => {
-      if (!currentUser) return;
-      const updatedUser = { ...currentUser, role };
-      setCurrentUser(updatedUser);
-      if (role === Role.Admin) {
-          setIsAdminMode(true);
-          setAdminTab('dashboard');
-      } else if (role === Role.Kitchen) {
-          setIsAdminMode(false);
-          setWaiterViewMode('kitchen');
-      } else {
-          setIsAdminMode(false);
-          setWaiterViewMode('menu');
+  useEffect(() => {
+      if (currentUser) {
+          if (currentUser.role === Role.Admin) {
+              setIsAdminMode(false);
+              setWaiterViewMode('menu');
+          } else if (currentUser.role === Role.Kitchen) {
+              setIsAdminMode(false);
+              setWaiterViewMode('kitchen');
+          } else {
+              setIsAdminMode(false);
+              setWaiterViewMode('menu');
+          }
       }
-  };
+  }, []);
 
   const updateBranchContext = async (branchId: string) => {
       const updated = { ...settings, currentBranchId: branchId };
@@ -361,22 +360,40 @@ export default function App() {
             </div>
 
             <div className="flex gap-4 items-center overflow-x-auto scrollbar-hide">
-                <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border dark:border-slate-700">
-                    <button onClick={() => switchRole(Role.Admin)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${currentUser.role === Role.Admin ? 'bg-white dark:bg-slate-600 shadow-sm text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}>Admin</button>
-                    <button onClick={() => switchRole(Role.Waiter)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${currentUser.role === Role.Waiter ? 'bg-white dark:bg-slate-600 shadow-sm text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}>Waiter</button>
-                    <button onClick={() => switchRole(Role.Kitchen)} className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all ${currentUser.role === Role.Kitchen ? 'bg-white dark:bg-slate-600 shadow-sm text-brand-600 dark:text-brand-400' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}>Kitchen</button>
+                {/* Role display badge (no switching - enforced by login) */}
+                <div className="flex bg-slate-100 dark:bg-slate-800 px-4 py-2 rounded-xl border dark:border-slate-700">
+                    <span className={`text-[10px] font-black uppercase tracking-widest ${
+                        currentUser.role === Role.Admin ? 'text-purple-600 dark:text-purple-400' :
+                        currentUser.role === Role.Waiter ? 'text-blue-600 dark:text-blue-400' :
+                        'text-green-600 dark:text-green-400'
+                    }`}>
+                        {currentUser.role}
+                    </span>
                 </div>
-                 {isAdminMode ? (
+                 {currentUser.role === Role.Admin && isAdminMode ? (
                      ['dashboard', 'team', 'tables', 'inventory', 'branches', 'settings'].map(t => (
                         <button key={t} onClick={()=>setAdminTab(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${adminTab===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
                      ))
-                 ) : (
-                     ['menu', 'orders', 'kitchen'].filter(t => {
-                        if (currentUser.role === Role.Kitchen) return t === 'kitchen';
-                        return true;
-                     }).map(t => (
+                 ) : currentUser.role === Role.Admin && !isAdminMode ? (
+                     ['menu', 'orders'].map(t => (
                         <button key={t} onClick={()=>setWaiterViewMode(t as any)} className={`px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all ${waiterViewMode===t ? 'bg-slate-800 dark:bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}`}>{t}</button>
                      ))
+                 ) : currentUser.role === Role.Waiter ? (
+                     <button onClick={()=>setWaiterViewMode('menu')} className="px-3 md:px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap bg-slate-800 dark:bg-slate-700 text-white">POS</button>
+                 ) : null}
+
+                 {/* Admin mode toggle - only for admins */}
+                 {currentUser.role === Role.Admin && (
+                     <button
+                         onClick={() => {
+                             setIsAdminMode(!isAdminMode);
+                             if (!isAdminMode) setAdminTab('dashboard');
+                             else setWaiterViewMode('menu');
+                         }}
+                         className="px-4 py-1.5 rounded-lg font-bold uppercase text-[10px] md:text-xs whitespace-nowrap transition-all bg-brand-600 hover:bg-brand-700 text-white shadow-lg"
+                     >
+                         {isAdminMode ? 'Switch to POS' : 'Admin Panel'}
+                     </button>
                  )}
             </div>
 
