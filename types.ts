@@ -105,6 +105,7 @@ export interface OrderItem extends MenuItem {
   selectedModifiers: Modifier[];
   notes?: string;
   completed?: boolean;
+  kitchenStatus?: 'waiting' | 'preparing' | 'done';
 }
 
 export interface Order {

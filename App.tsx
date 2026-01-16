@@ -234,13 +234,19 @@ export default function App() {
 
   const placeOrder = async () => {
       if (cart.length === 0) return;
+
+      const itemsWithKitchenStatus = cart.map(item => ({
+          ...item,
+          kitchenStatus: item.isKitchenItem ? 'waiting' as const : undefined
+      }));
+
       if (activeTableOrder) {
           await db.addItemsToOrder(
-              activeTableOrder.uuid, 
-              cart, 
-              cartSubtotal, 
-              cartTax, 
-              cartTotal, 
+              activeTableOrder.uuid,
+              itemsWithKitchenStatus,
+              cartSubtotal,
+              cartTax,
+              cartTotal,
               selectedTables.length > 0 ? selectedTables : undefined,
               currentUser?.name
           );
@@ -249,7 +255,7 @@ export default function App() {
               uuid: generateUUID(),
               tableIds: selectedTables,
               tableNo: selectedTables.length > 0 ? selectedTables.join(', ') : undefined,
-              items: cart,
+              items: itemsWithKitchenStatus,
               subtotal: cartSubtotal,
               tax: cartTax,
               discount: manualDiscount + rewardDiscount,

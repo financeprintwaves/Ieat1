@@ -99,6 +99,31 @@ class SupabaseDB {
     }
   }
 
+  async updateOrderItemKitchenStatus(orderId: string, itemIndex: number, status: 'waiting' | 'preparing' | 'done'): Promise<void> {
+    const { data: order, error: fetchError } = await supabase
+      .from('orders')
+      .select('items')
+      .eq('id', orderId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const items = order.items || [];
+    if (itemIndex < items.length) {
+      items[itemIndex].kitchenStatus = status;
+
+      const { error } = await supabase
+        .from('orders')
+        .update({
+          items: items,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+    }
+  }
+
   async getUnsyncedOrders(): Promise<Order[]> {
     const { data, error } = await supabase
       .from('orders')
