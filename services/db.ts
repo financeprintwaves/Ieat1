@@ -369,13 +369,12 @@ class SupabaseDB {
 
   async authenticate(pin: string): Promise<Employee | null> {
     const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('pin', pin)
-      .maybeSingle();
+      .rpc('authenticate_employee', { input_pin: pin });
 
     if (error) throw error;
-    return data as Employee | null;
+
+    if (!data || data.length === 0) return null;
+    return data[0] as Employee;
   }
 
   // --- Attendance ---
