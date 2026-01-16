@@ -143,3 +143,53 @@ export interface InventoryLog {
   verified?: boolean;
   branchId?: string;
 }
+
+export interface PaymentTransaction {
+  id: string;
+  orderId: string;
+  transactionType: 'cash' | 'card' | 'partial';
+  cashAmount: number;
+  cardAmount: number;
+  totalAmount: number;
+  validationStatus: 'pending' | 'valid' | 'mismatch';
+  status: 'pending' | 'completed' | 'refunded' | 'failed';
+  paymentReference?: string;
+  processedById?: string;
+  createdAt: string;
+  processedAt?: string;
+}
+
+export interface PaymentBreakdown {
+  cashAmount: number;
+  cardAmount: number;
+  totalAmount: number;
+  validationStatus: 'pending' | 'valid' | 'mismatch';
+  variance?: number;
+  cardReference?: string;
+}
+
+export interface RefundRequest {
+  id: string;
+  orderId: string;
+  originalTransactionId: string;
+  refundAmount: number;
+  refundMethod: 'cash' | 'card' | 'partial';
+  reason: string;
+  approvedById?: string;
+  status: 'pending' | 'completed' | 'failed';
+  createdAt: string;
+  processedAt?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  employeeId?: string;
+  branchId?: string;
+  actionType: string;
+  resourceType: string;
+  resourceId?: string;
+  oldValues?: Record<string, any>;
+  newValues?: Record<string, any>;
+  ipAddress?: string;
+  createdAt: string;
+}

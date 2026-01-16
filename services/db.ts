@@ -533,6 +533,72 @@ class SupabaseDB {
 
     if (error) throw error;
   }
+
+  // --- Payment Transactions ---
+  async createPaymentTransaction(orderId: string, cashAmount: number, cardAmount: number, totalAmount: number, cardRef?: string, processedById?: string): Promise<any> {
+    const transactionType = cashAmount > 0 && cardAmount > 0 ? 'partial' : cashAmount > 0 ? 'cash' : 'card';
+
+    const { data, error } = await supabase
+      .from('payment_transactions')
+      .insert([{
+        order_id: orderId,
+        transaction_type: transactionType,
+        cash_amount: cashAmount,
+        card_amount: cardAmount,
+        total_amount: totalAmount,
+        validation_status: 'valid',
+        status: 'completed',
+        payment_reference: cardRef,
+        processed_by_id: processedById,
+        created_at: new Date().toISOString(),
+        processed_at: new Date().toISOString()
+      }])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  }
+
+  async getPaymentTransactions(orderId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('payment_transactions')
+      .select('*')
+      .eq('order_id', orderId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async updateOrderPaymentStatus(orderId: string, paymentStatus: 'pending' | 'partial' | 'complete', breakdown?: any): Promise<void> {
+    const { error } = await supabase
+      .from('orders')
+      .update({
+        payment_status: paymentStatus,
+        payment_breakdown_json: breakdown || {},
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', orderId);
+
+    if (error) throw error;
+  }
+
+  async logAuditAction(employeeId: string | undefined, actionType: string, resourceType: string, resourceId: string, oldValues?: any, newValues?: any): Promise<void> {
+    const { error } = await supabase
+      .from('audit_logs')
+      .insert([{
+        employee_id: employeeId,
+        action_type: actionType,
+        resource_type: resourceType,
+        resource_id: resourceId,
+        old_values: oldValues,
+        new_values: newValues,
+        created_at: new Date().toISOString()
+      }]);
+
+    if (error) throw error;
+  }
 }
 
 export const db = new SupabaseDB();
