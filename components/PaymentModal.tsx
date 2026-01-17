@@ -69,7 +69,9 @@ export function PaymentModal({
         setError(null);
       }, 1500);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment processing failed');
+      const errorMessage = err instanceof Error ? err.message : 'Payment processing failed';
+      console.error('Payment error in modal:', errorMessage);
+      setError(errorMessage);
     }
   };
 

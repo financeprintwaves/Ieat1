@@ -143,7 +143,7 @@ class SupabaseDB {
     if (error) throw error;
   }
 
-  async markOrderAsPaid(uuid: string, paymentMethod: 'card' | 'cash', paidAt: number): Promise<void> {
+  async markOrderAsPaid(uuid: string, paymentMethod: 'card' | 'cash' | 'partial', paidAt: number): Promise<void> {
     const { error } = await supabase
       .from('orders')
       .update({

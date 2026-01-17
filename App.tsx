@@ -323,6 +323,8 @@ export default function App() {
       setPrintStatus('Processing Payment...');
 
       try {
+          console.log('Starting payment process with:', { cashAmount, cardAmount, cardRef });
+          
           let orderToProcess: Order;
 
           if (isSettlingExistingOrder && orderToSettle) {
@@ -340,6 +342,7 @@ export default function App() {
           }
 
           const orderTotal = isSettlingExistingOrder ? orderToProcess.totalAmount : cartTotal;
+          console.log('Processing payment for order:', orderToProcess.uuid, 'amount:', orderTotal);
 
           await db.createPaymentTransaction(
               orderToProcess.uuid,
@@ -349,8 +352,10 @@ export default function App() {
               cardRef,
               currentUser?.id
           );
+          console.log('Payment transaction created');
 
           const paymentMethod = cashAmount > 0 && cardAmount > 0 ? 'partial' : (cashAmount > 0 ? 'cash' : 'card');
+          console.log('Marking order as paid with method:', paymentMethod);
           await db.markOrderAsPaid(orderToProcess.uuid, paymentMethod, Date.now());
 
           await db.updateOrderPaymentStatus(orderToProcess.uuid, 'complete', {
@@ -359,8 +364,9 @@ export default function App() {
               totalAmount: orderTotal,
               cardReference: cardRef
           });
+          console.log('Order payment status updated');
 
-          await offlineStorage.queueSyncOperation('payment', {
+          const syncOpId = await offlineStorage.queueSyncOperation('payment', {
               orderId: orderToProcess.uuid,
               cashAmount,
               cardAmount,
@@ -368,6 +374,7 @@ export default function App() {
               cardReference: cardRef,
               timestamp: Date.now()
           });
+          console.log('Payment sync operation queued:', syncOpId);
 
           setPrintStatus('Payment Successful!');
           setReceiptOrder(orderToProcess);
@@ -377,10 +384,10 @@ export default function App() {
           setTimeout(() => setPrintStatus(null), 2000);
           await refreshData();
       } catch (error) {
-          console.error('Payment failed:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('Payment failed:', errorMessage, error);
           setPrintStatus(null);
-          setIsProcessingPayment(false);
-          throw error;
+          // Don't rethrow - let the modal handle the error display
       } finally {
           setIsProcessingPayment(false);
       }

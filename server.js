@@ -113,9 +113,20 @@ app.post('/api/attendance', async (req, res) => {
 // 4. Sync Payments (Push from Local to MySQL)
 app.post('/api/sync/payment', async (req, res) => {
     const { orderId, cashAmount, cardAmount, totalAmount, cardReference, timestamp } = req.body;
+    
+    // Validate required fields
+    if (!orderId || totalAmount === undefined) {
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Missing required fields: orderId and totalAmount' 
+        });
+    }
+
     const connection = await pool.getConnection();
     
     try {
+        await connection.beginTransaction();
+
         // Check if payment already exists for this order
         const [existing] = await connection.execute(
             'SELECT id FROM payment_transactions WHERE order_id = ? LIMIT 1',
@@ -124,24 +135,30 @@ app.post('/api/sync/payment', async (req, res) => {
 
         if (existing.length === 0) {
             // Insert new payment transaction
-            const transactionType = cashAmount > 0 && cardAmount > 0 ? 'partial' : 
-                                   cashAmount > 0 ? 'cash' : 'card';
+            const transactionType = (cashAmount > 0 && cardAmount > 0) ? 'partial' : 
+                                   (cashAmount > 0) ? 'cash' : 'card';
+            
+            const paymentDate = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
             
             await connection.execute(
                 `INSERT INTO payment_transactions (order_id, transaction_type, cash_amount, card_amount, total_amount, payment_reference, status, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)`,
-                [orderId, transactionType, cashAmount, cardAmount, totalAmount, cardReference || null, new Date(timestamp)]
+                [orderId, transactionType, cashAmount || 0, cardAmount || 0, totalAmount, cardReference || null, paymentDate]
             );
 
             // Update order payment status
+            const paymentMethod = transactionType === 'partial' ? 'split' : transactionType;
             await connection.execute(
-                `UPDATE orders SET payment_method = ?, payment_status = 'complete', updated_at = NOW() WHERE uuid = ?`,
-                [transactionType === 'partial' ? 'split' : transactionType, orderId]
+                `UPDATE orders SET payment_method = ?, payment_status = 'complete', paid_at = NOW(), updated_at = NOW() WHERE uuid = ?`,
+                [paymentMethod, orderId]
             );
         }
 
+        await connection.commit();
+        console.log(`Payment synced successfully for order: ${orderId}`);
         res.json({ success: true, message: 'Payment synced successfully' });
     } catch (error) {
+        await connection.rollback();
         console.error('Payment Sync Error:', error);
         res.status(500).json({ success: false, error: error.message });
     } finally {

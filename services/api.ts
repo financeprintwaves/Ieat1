@@ -5,20 +5,32 @@ const API_BASE_URL = 'http://localhost:3001/api';
 
 export class ApiService {
     private static async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options?.headers,
-            },
-        });
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options?.headers,
+                },
+            });
 
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Network response was not ok');
+            if (!response.ok) {
+                let errorMessage = `HTTP ${response.status}`;
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorData.message || errorMessage;
+                } catch (e) {
+                    const text = await response.text();
+                    errorMessage = text || errorMessage;
+                }
+                throw new Error(`API Error: ${errorMessage}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.error(`API Request failed for ${endpoint}:`, error);
+            throw error;
         }
-
-        return response.json();
     }
 
     // Push local orders to MySQL
@@ -44,6 +56,7 @@ export class ApiService {
 
     // Sync payment transactions to cloud
     static async syncPayment(paymentData: any): Promise<{ success: boolean; message: string }> {
+        console.log('Syncing payment data:', paymentData);
         return this.request('/sync/payment', {
             method: 'POST',
             body: JSON.stringify(paymentData),
