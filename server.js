@@ -110,5 +110,44 @@ app.post('/api/attendance', async (req, res) => {
     }
 });
 
+// 4. Sync Payments (Push from Local to MySQL)
+app.post('/api/sync/payment', async (req, res) => {
+    const { orderId, cashAmount, cardAmount, totalAmount, cardReference, timestamp } = req.body;
+    const connection = await pool.getConnection();
+    
+    try {
+        // Check if payment already exists for this order
+        const [existing] = await connection.execute(
+            'SELECT id FROM payment_transactions WHERE order_id = ? LIMIT 1',
+            [orderId]
+        );
+
+        if (existing.length === 0) {
+            // Insert new payment transaction
+            const transactionType = cashAmount > 0 && cardAmount > 0 ? 'partial' : 
+                                   cashAmount > 0 ? 'cash' : 'card';
+            
+            await connection.execute(
+                `INSERT INTO payment_transactions (order_id, transaction_type, cash_amount, card_amount, total_amount, payment_reference, status, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)`,
+                [orderId, transactionType, cashAmount, cardAmount, totalAmount, cardReference || null, new Date(timestamp)]
+            );
+
+            // Update order payment status
+            await connection.execute(
+                `UPDATE orders SET payment_method = ?, payment_status = 'complete', updated_at = NOW() WHERE uuid = ?`,
+                [transactionType === 'partial' ? 'split' : transactionType, orderId]
+            );
+        }
+
+        res.json({ success: true, message: 'Payment synced successfully' });
+    } catch (error) {
+        console.error('Payment Sync Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`iEat Backend running on port ${PORT}`));
