@@ -122,6 +122,7 @@ export default function App() {
 
       try {
           if (unsynced.length > 0) {
+              console.log('Syncing unsynced orders:', unsynced.length);
               await ApiService.syncOrders(unsynced);
               for (const order of unsynced) {
                   await db.updateOrder(order.uuid, { syncStatus: SyncStatus.Synced });
@@ -129,14 +130,19 @@ export default function App() {
           }
 
           const pendingOps = await offlineStorage.getPendingSyncOperations();
+          console.log('Syncing pending operations:', pendingOps.length);
+          
           for (const op of pendingOps) {
               try {
                   if (op.type === 'payment') {
+                      console.log('Syncing payment operation:', op.id, op.data);
                       await ApiService.syncPayment(op.data);
                   } else if (op.type === 'create_order') {
+                      console.log('Syncing order operation:', op.id, op.data);
                       await ApiService.syncOrders([op.data]);
                   }
                   await offlineStorage.markSyncOperationComplete(op.id);
+                  console.log('Successfully synced operation:', op.id);
               } catch (err) {
                   console.error(`Failed to sync operation ${op.id}:`, err);
                   await offlineStorage.markSyncOperationFailed(op.id);
@@ -381,6 +387,17 @@ export default function App() {
           setShowPaymentModal(false);
           setOrderToSettle(null);
           setIsSettlingExistingOrder(false);
+          
+          // Automatically sync payment to Supabase/MySQL
+          setTimeout(async () => {
+              try {
+                  console.log('Auto-syncing payment to cloud...');
+                  await handleSync();
+              } catch (err) {
+                  console.error('Auto-sync failed, will retry on next manual sync:', err);
+              }
+          }, 1000);
+          
           setTimeout(() => setPrintStatus(null), 2000);
           await refreshData();
       } catch (error) {
